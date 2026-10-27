@@ -1,0 +1,203 @@
+// Just Say It – created by Stefano Roman Gunness
+// MIT License · https://github.com/stefanoromang/just-say-it
+
+import AppKit
+import Foundation
+
+enum AppCategory: String, CaseIterable, Codable, Identifiable {
+    case email, work, casual, ai, code, other
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .email: "Email"
+        case .work: "Work chat"
+        case .casual: "Personal messages"
+        case .ai: "AI chats & prompts"
+        case .code: "Code editors"
+        case .other: "Everything else"
+        }
+    }
+}
+
+enum Tone: String, CaseIterable, Codable, Identifiable {
+    case formal, professional, casual, veryCasual, verbatim
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .formal: "Formal"
+        case .professional: "Professional"
+        case .casual: "Casual"
+        case .veryCasual: "Very casual"
+        case .verbatim: "Exact words (only clean up)"
+        }
+    }
+    var guidance: String {
+        switch self {
+        case .formal: "Use a formal, polished register with complete sentences and proper capitalization."
+        case .professional: "Use a clear, friendly, professional register with complete sentences."
+        case .casual: "Use a relaxed conversational register. Contractions are fine. Keep it short."
+        case .veryCasual: "Use a very casual chat register: lowercase is fine, minimal punctuation, no trailing period on single sentences."
+        case .verbatim: "Keep the speaker's exact wording; only fix punctuation, capitalization, fillers and self-corrections."
+        }
+    }
+}
+
+enum HotkeyChoice: String, CaseIterable, Codable, Identifiable {
+    case rightOption, rightCommand, rightControl, fn
+    var id: String { rawValue }
+    var keyCode: UInt16 {
+        switch self {
+        case .fn: 63
+        case .rightOption: 61
+        case .rightCommand: 54
+        case .rightControl: 62
+        }
+    }
+    var flag: NSEvent.ModifierFlags {
+        switch self {
+        case .fn: .function
+        case .rightOption: .option
+        case .rightCommand: .command
+        case .rightControl: .control
+        }
+    }
+    var label: String {
+        switch self {
+        case .fn: "fn / 🌐 Globe"
+        case .rightOption: "Right ⌥ Option"
+        case .rightCommand: "Right ⌘ Command"
+        case .rightControl: "Right ⌃ Control"
+        }
+    }
+}
+
+enum RewriteStyle: String, CaseIterable, Identifiable {
+    case formal, casual, concise, enthusiastic, longer, summarize, grammar
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .formal: "More formal"
+        case .casual: "More casual"
+        case .concise: "Shorter & concise"
+        case .enthusiastic: "Enthusiastic"
+        case .longer: "Make it longer"
+        case .summarize: "Summarize"
+        case .grammar: "Fix grammar only"
+        }
+    }
+    var instruction: String {
+        switch self {
+        case .formal: "Rewrite the text in a more formal, polished tone."
+        case .casual: "Rewrite the text in a relaxed, casual tone."
+        case .concise: "Rewrite the text to be as short and clear as possible while keeping every key point."
+        case .enthusiastic: "Rewrite the text with a warm, enthusiastic, upbeat tone."
+        case .longer: "Expand the text with more detail and complete sentences, without inventing facts."
+        case .summarize: "Summarize the text in one to three sentences."
+        case .grammar: "Fix only grammar, spelling and punctuation. Do not change wording otherwise."
+        }
+    }
+}
+
+struct Replacement: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var heard: String
+    var write: String
+}
+
+struct Snippet: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var trigger: String
+    var text: String
+}
+
+struct HistoryItem: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var date: Date
+    var raw: String
+    var final: String
+    var app: String
+    var seconds: Double
+    var words: Int
+}
+
+struct Prefs: Codable {
+    var hotkey: HotkeyChoice = .rightOption
+    var localeID: String = "en_US"
+    var aiCleanup = true
+    var playSounds = true
+    var restoreClipboard = true
+    var tones: [AppCategory: Tone] = [
+        .email: .professional, .work: .professional, .casual: .casual,
+        .ai: .verbatim, .code: .verbatim, .other: .professional,
+    ]
+    var customInstructions: [AppCategory: String] = [:]
+    var vocabulary: [String] = []
+    var replacements: [Replacement] = []
+    var snippets: [Snippet] = []
+    var totalWords = 0
+    var totalSeconds = 0.0
+    var autoInsert = true
+    var showResultCard = true
+    var useScreenContext = true
+
+    init() {}
+
+    // Tolerant decoding so older prefs files keep working when new settings are added.
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        let def = Prefs()
+        hotkey = (try? c.decode(HotkeyChoice.self, forKey: .hotkey)) ?? def.hotkey
+        localeID = (try? c.decode(String.self, forKey: .localeID)) ?? def.localeID
+        aiCleanup = (try? c.decode(Bool.self, forKey: .aiCleanup)) ?? def.aiCleanup
+        playSounds = (try? c.decode(Bool.self, forKey: .playSounds)) ?? def.playSounds
+        restoreClipboard = (try? c.decode(Bool.self, forKey: .restoreClipboard)) ?? def.restoreClipboard
+        tones = (try? c.decode([AppCategory: Tone].self, forKey: .tones)) ?? def.tones
+        customInstructions = (try? c.decode([AppCategory: String].self, forKey: .customInstructions)) ?? [:]
+        vocabulary = (try? c.decode([String].self, forKey: .vocabulary)) ?? []
+        replacements = (try? c.decode([Replacement].self, forKey: .replacements)) ?? []
+        snippets = (try? c.decode([Snippet].self, forKey: .snippets)) ?? []
+        totalWords = (try? c.decode(Int.self, forKey: .totalWords)) ?? 0
+        totalSeconds = (try? c.decode(Double.self, forKey: .totalSeconds)) ?? 0
+        autoInsert = (try? c.decode(Bool.self, forKey: .autoInsert)) ?? def.autoInsert
+        showResultCard = (try? c.decode(Bool.self, forKey: .showResultCard)) ?? def.showResultCard
+        useScreenContext = (try? c.decode(Bool.self, forKey: .useScreenContext)) ?? def.useScreenContext
+    }
+}
+
+@MainActor
+final class Store: ObservableObject {
+    static let shared = Store()
+
+    @Published var prefs: Prefs { didSet { save() } }
+    @Published var history: [HistoryItem] { didSet { saveHistory() } }
+
+    private let dir: URL
+    private var prefsURL: URL { dir.appendingPathComponent("prefs.json") }
+    private var historyURL: URL { dir.appendingPathComponent("history.json") }
+
+    private init() {
+        dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("JustSayIt", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dec = JSONDecoder()
+        prefs = (try? dec.decode(Prefs.self, from: Data(contentsOf: dir.appendingPathComponent("prefs.json")))) ?? Prefs()
+        history = (try? dec.decode([HistoryItem].self, from: Data(contentsOf: dir.appendingPathComponent("history.json")))) ?? []
+    }
+
+    func tone(for c: AppCategory) -> Tone { prefs.tones[c] ?? .professional }
+
+    func record(_ item: HistoryItem) {
+        history.insert(item, at: 0)
+        if history.count > 300 { history.removeLast(history.count - 300) }
+        prefs.totalWords += item.words
+        prefs.totalSeconds += item.seconds
+    }
+
+    private func save() {
+        if let d = try? JSONEncoder().encode(prefs) { try? d.write(to: prefsURL, options: .atomic) }
+    }
+
+    private func saveHistory() {
+        if let d = try? JSONEncoder().encode(history) { try? d.write(to: historyURL, options: .atomic) }
+    }
+}

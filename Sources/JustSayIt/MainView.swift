@@ -1,0 +1,437 @@
+import AppKit
+import Speech
+import SwiftUI
+
+enum Pane: String, CaseIterable, Identifiable {
+    case home = "Home", style = "Tone & Style", dictionary = "Dictionary", snippets = "Snippets", rewrite = "AI Rewrite", history = "History", settings = "Settings"
+    var id: String { rawValue }
+    var icon: String {
+        switch self {
+        case .home: "house"
+        case .style: "theatermasks"
+        case .dictionary: "character.book.closed"
+        case .snippets: "text.badge.plus"
+        case .rewrite: "wand.and.stars"
+        case .history: "clock.arrow.circlepath"
+        case .settings: "gearshape"
+        }
+    }
+}
+
+struct MainView: View {
+    @ObservedObject var c: Controller
+    @ObservedObject var store: Store
+    @StateObject private var ui = UIState()
+
+    var body: some View {
+        NavigationSplitView {
+            List(Pane.allCases, selection: $ui.pane) { p in
+                Label(p.rawValue, systemImage: p.icon).tag(p)
+            }
+            .navigationSplitViewColumnWidth(190)
+        } detail: {
+            ScrollView {
+                Group {
+                    switch ui.pane {
+                    case .home: HomePane(c: c, store: store)
+                    case .style: StylePane(store: store)
+                    case .dictionary: DictionaryPane(store: store)
+                    case .snippets: SnippetsPane(store: store)
+                    case .rewrite: RewritePane(c: c)
+                    case .history: HistoryPane(store: store)
+                    case .settings: SettingsPane(c: c, store: store)
+                    }
+                }
+                .padding(28)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .navigationTitle(ui.pane.rawValue)
+        }
+        .onAppear { c.refreshPermissions() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in c.refreshPermissions() }
+    }
+}
+
+// MARK: Home
+
+struct HomePane: View {
+    @ObservedObject var c: Controller
+    @ObservedObject var store: Store
+
+    var wpm: Int {
+        guard store.prefs.totalSeconds > 5 else { return 0 }
+        return Int(Double(store.prefs.totalWords) / (store.prefs.totalSeconds / 60))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            Text("Just Say It").font(.largeTitle.bold())
+            Text("Free, unlimited, private voice typing. Everything runs on your Mac.")
+                .foregroundStyle(.secondary)
+            Text("Created by Stefano Roman Gunness").font(.caption).foregroundStyle(.tertiary)
+
+            GroupBox("Setup") {
+                VStack(alignment: .leading, spacing: 10) {
+                    PermRow(ok: c.micGranted, title: "Microphone", detail: "To hear you") { c.requestMic() }
+                    PermRow(ok: c.axGranted, title: "Accessibility", detail: "To type into other apps and use the hotkey") {
+                        Inserter.requestAccessibility()
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                    }
+                    PermRow(ok: c.screenGranted, title: "Screen Recording (optional, for context)",
+                            detail: "Reads the visible email/chat so names and replies are right. Stays on your Mac.") {
+                        ContextReader.requestScreenAccess()
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+                    }
+                    PermRow(ok: c.modelReady, title: "Speech model", detail: c.modelStatus) { Task { await c.prepareModel() } }
+                    PermRow(ok: TextBrain.aiAvailable, title: "Apple Intelligence (smart cleanup, Scribe, Rewrite)",
+                            detail: TextBrain.aiAvailable ? "On-device model available" : "Turn on in System Settings › Apple Intelligence") {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Siri-Settings.extension")!)
+                    }
+                }
+                .padding(6)
+            }
+
+            GroupBox("How to use") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Hold **\(store.prefs.hotkey.label)**, speak, release. Text appears where your cursor is.", systemImage: "mic")
+                    Label("**Double-tap** it for hands-free. Tap once more to finish. **Esc** cancels.", systemImage: "hand.raised.slash")
+                    Label("Hold **⇧ Shift + \(store.prefs.hotkey.label)** for **Scribe**: say what you want, get a polished message.", systemImage: "wand.and.stars")
+                    Label("Say **\"scratch that\"** to drop the last sentence, **\"new line\"** / **\"new paragraph\"** for layout.", systemImage: "arrow.uturn.backward")
+                    Label("Select text and press **⌃⌥R** to make it concise (more styles in the menu bar).", systemImage: "text.redaction")
+                }
+                .padding(6)
+            }
+
+            HStack(spacing: 16) {
+                Stat(value: "\(store.prefs.totalWords)", label: "words dictated")
+                Stat(value: wpm > 0 ? "\(wpm)" : "–", label: "words per minute")
+                Stat(value: "\(Int(Double(store.prefs.totalWords) / 40.0)) min", label: "saved vs. typing")
+            }
+
+            if !c.lastResult.isEmpty {
+                GroupBox("Last dictation") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !c.lastContext.isEmpty {
+                            Label(c.lastContext, systemImage: "scope").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text(c.lastResult).textSelection(.enabled)
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(c.lastResult, forType: .string)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+                }
+            }
+        }
+    }
+}
+
+struct PermRow: View {
+    let ok: Bool
+    let title: String
+    let detail: String
+    let fix: () -> Void
+    var body: some View {
+        HStack {
+            Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundStyle(ok ? .green : .orange)
+            VStack(alignment: .leading) {
+                Text(title).bold()
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !ok { Button("Fix", action: fix) }
+        }
+    }
+}
+
+struct Stat: View {
+    let value: String
+    let label: String
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text(value).font(.title.bold())
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary))
+    }
+}
+
+// MARK: Tone & Style
+
+struct StylePane: View {
+    @ObservedObject var store: Store
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Just Say It detects the app you're typing in and adjusts the tone automatically.")
+                .foregroundStyle(.secondary)
+            ForEach(AppCategory.allCases) { cat in
+                GroupBox(cat.label) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Picker("Tone", selection: Binding(
+                            get: { store.tone(for: cat) },
+                            set: { store.prefs.tones[cat] = $0 })) {
+                            ForEach(Tone.allCases) { Text($0.label).tag($0) }
+                        }
+                        TextField("Personal style, e.g. \"Sign emails with – Stefano\" or \"Never use emojis\"",
+                                  text: Binding(get: { store.prefs.customInstructions[cat] ?? "" },
+                                                set: { store.prefs.customInstructions[cat] = $0 }))
+                    }
+                    .padding(6)
+                }
+            }
+        }
+    }
+}
+
+// MARK: Dictionary
+
+struct DictionaryPane: View {
+    @ObservedObject var store: Store
+    @StateObject private var f = UIState()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            GroupBox("My words") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Names, brands, acronyms and jargon. They're fed to the speech engine and always spelled exactly like this.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        TextField("e.g. Kubernetes, metoprolol, OpenCode", text: $f.word).onSubmit(addWord)
+                        Button("Add", action: addWord)
+                    }
+                    FlowList(items: store.prefs.vocabulary) { w in store.prefs.vocabulary.removeAll { $0 == w } }
+                }
+                .padding(6)
+            }
+            GroupBox("Auto-replace") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Fix words that are always misheard.").font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        TextField("When I say…", text: $f.heard)
+                        Image(systemName: "arrow.right")
+                        TextField("Write…", text: $f.write).onSubmit(addRep)
+                        Button("Add", action: addRep)
+                    }
+                    ForEach(store.prefs.replacements) { r in
+                        HStack {
+                            Text(r.heard)
+                            Image(systemName: "arrow.right").foregroundStyle(.secondary)
+                            Text(r.write).bold()
+                            Spacer()
+                            Button(role: .destructive) { store.prefs.replacements.removeAll { $0.id == r.id } } label: { Image(systemName: "trash") }
+                                .buttonStyle(.borderless)
+                        }
+                    }
+                }
+                .padding(6)
+            }
+        }
+    }
+
+    func addWord() {
+        let w = f.word.trimmingCharacters(in: .whitespaces)
+        guard !w.isEmpty, !store.prefs.vocabulary.contains(w) else { return }
+        store.prefs.vocabulary.append(w)
+        f.word = ""
+    }
+
+    func addRep() {
+        let h = f.heard.trimmingCharacters(in: .whitespaces), w = f.write.trimmingCharacters(in: .whitespaces)
+        guard !h.isEmpty, !w.isEmpty else { return }
+        store.prefs.replacements.append(Replacement(heard: h, write: w))
+        f.heard = ""; f.write = ""
+    }
+}
+
+struct FlowList: View {
+    let items: [String]
+    let remove: (String) -> Void
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), alignment: .leading)], alignment: .leading, spacing: 6) {
+            ForEach(items, id: \.self) { w in
+                HStack(spacing: 4) {
+                    Text(w).lineLimit(1)
+                    Button { remove(w) } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.borderless)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Capsule().fill(.quaternary))
+            }
+        }
+    }
+}
+
+// MARK: Snippets
+
+struct SnippetsPane: View {
+    @ObservedObject var store: Store
+    @StateObject private var f = UIState()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Say the trigger on its own (or \"insert <trigger>\" mid-sentence) to paste the full text.")
+                .foregroundStyle(.secondary)
+            GroupBox("New snippet") {
+                VStack(alignment: .leading) {
+                    TextField("Trigger phrase, e.g. \"my address\"", text: $f.trigger)
+                    TextEditor(text: $f.text).frame(height: 80).font(.body)
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
+                    Button("Add snippet") {
+                        let t = f.trigger.trimmingCharacters(in: .whitespaces)
+                        guard !t.isEmpty, !f.text.isEmpty else { return }
+                        store.prefs.snippets.append(Snippet(trigger: t, text: f.text))
+                        f.trigger = ""; f.text = ""
+                    }
+                }
+                .padding(6)
+            }
+            ForEach(store.prefs.snippets) { s in
+                GroupBox {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading) {
+                            Text("“\(s.trigger)”").bold()
+                            Text(s.text).font(.callout).foregroundStyle(.secondary).lineLimit(4)
+                        }
+                        Spacer()
+                        Button(role: .destructive) { store.prefs.snippets.removeAll { $0.id == s.id } } label: { Image(systemName: "trash") }
+                            .buttonStyle(.borderless)
+                    }
+                    .padding(4)
+                }
+            }
+        }
+    }
+}
+
+// MARK: Rewrite
+
+struct RewritePane: View {
+    @ObservedObject var c: Controller
+    @StateObject private var f = UIState()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Select text in any app and press ⌃⌥R, or use the menu bar › Rewrite. You can also paste text here.")
+                .foregroundStyle(.secondary)
+            TextEditor(text: $f.input).frame(height: 120).font(.body)
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
+            HStack {
+                ForEach(RewriteStyle.allCases) { s in
+                    Button(s.label) {
+                        let src = f.input.isEmpty ? c.lastResult : f.input
+                        guard !src.isEmpty else { return }
+                        f.busy = true
+                        Task {
+                            f.output = await TextBrain.rewrite(src, style: s) ?? "Rewrite unavailable. Turn on Apple Intelligence."
+                            f.busy = false
+                        }
+                    }
+                }
+                if f.busy { ProgressView().controlSize(.small) }
+            }
+            .disabled(f.busy)
+            if !f.output.isEmpty {
+                GroupBox {
+                    VStack(alignment: .leading) {
+                        Text(f.output).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(f.output, forType: .string)
+                        }
+                    }
+                    .padding(6)
+                }
+            }
+        }
+    }
+}
+
+// MARK: History
+
+struct HistoryPane: View {
+    @ObservedObject var store: Store
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("\(store.history.count) recent dictations (stored only on this Mac)").foregroundStyle(.secondary)
+                Spacer()
+                Button("Clear") { store.history.removeAll() }
+            }
+            ForEach(store.history) { h in
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(h.app).font(.caption.bold())
+                            Text(h.date, style: .relative).font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Copy") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(h.final, forType: .string)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        Text(h.final).textSelection(.enabled)
+                        if h.raw != h.final {
+                            Text("Heard: " + h.raw).font(.caption).foregroundStyle(.tertiary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(4)
+                }
+            }
+        }
+    }
+}
+
+// MARK: Settings
+
+struct SettingsPane: View {
+    @ObservedObject var c: Controller
+    @ObservedObject var store: Store
+    @StateObject private var f = UIState()
+
+    var body: some View {
+        Form {
+            Picker("Dictation hotkey", selection: Binding(get: { store.prefs.hotkey }, set: { c.setHotkey($0) })) {
+                ForEach(HotkeyChoice.allCases) { Text($0.label).tag($0) }
+            }
+            Picker("Language", selection: Binding(get: { store.prefs.localeID }, set: { v in
+                store.prefs.localeID = v
+                Task { await c.prepareModel() }
+            })) {
+                ForEach(f.locales, id: \.identifier) { l in
+                    Text(Locale.current.localizedString(forIdentifier: l.identifier) ?? l.identifier).tag(l.identifier)
+                }
+            }
+            Toggle("Smart AI cleanup (fillers, self-corrections, lists, tone)", isOn: $store.prefs.aiCleanup)
+            Toggle("Insert automatically into the selected text box", isOn: $store.prefs.autoInsert)
+            Toggle("Always show the result card (to edit, copy or rewrite)", isOn: $store.prefs.showResultCard)
+            Toggle("Use what's on screen as context (needs Screen Recording)", isOn: $store.prefs.useScreenContext)
+            Toggle("Play start/stop sounds", isOn: $store.prefs.playSounds)
+            Toggle("Restore my clipboard after inserting", isOn: $store.prefs.restoreClipboard)
+            Text(c.modelStatus).font(.caption).foregroundStyle(.secondary)
+        }
+        .formStyle(.grouped)
+        .task {
+            let all = await DictationTranscriber.supportedLocales
+            f.locales = all.sorted { ($0.identifier) < ($1.identifier) }
+        }
+    }
+}
+
+@MainActor
+final class UIState: ObservableObject {
+    @Published var pane: Pane = .home
+    @Published var word = ""
+    @Published var heard = ""
+    @Published var write = ""
+    @Published var trigger = ""
+    @Published var text = ""
+    @Published var input = ""
+    @Published var output = ""
+    @Published var busy = false
+    @Published var locales: [Locale] = []
+}
