@@ -20,7 +20,7 @@ echo "Created by Stefano Roman Gunness"
 echo
 
 # 1. Requirements
-[[ "$(uname)" == "Darwin" ]] || fail "This installer is for macOS. Windows is not supported yet."
+[[ "$(uname)" == "Darwin" ]] || fail "This installer is for macOS. On Windows, run install-windows.cmd or download JustSayIt-Setup.exe from https://github.com/stefanoromang/just-say-it/releases/latest"
 [[ "$(uname -m)" == "arm64" ]] || fail "Just Say It needs a Mac with Apple silicon (M1 or newer)."
 MACOS_MAJOR=$(sw_vers -productVersion | cut -d. -f1)
 (( MACOS_MAJOR >= 26 )) || fail "Just Say It needs macOS 26 (Tahoe) or newer. You have $(sw_vers -productVersion)."
