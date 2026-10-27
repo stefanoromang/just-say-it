@@ -1,26 +1,58 @@
 # Just Say It - installer for Windows
 # Created by Stefano Roman Gunness - MIT License
 #
-# Just Say It currently runs on macOS only. It is built on Apple's on-device
-# speech recognition and Apple Intelligence, which are not available on Windows.
-# A Windows version is planned. This script explains that and lets you
-# get notified when it ships.
+# Downloads the latest Just Say It setup from GitHub and runs it.
+# No admin rights needed.
+#
+# One-line install (PowerShell):
+#   irm https://raw.githubusercontent.com/stefanoromang/just-say-it/main/install-windows.ps1 | iex
+
+$ErrorActionPreference = "Stop"
+$repo = "stefanoromang/just-say-it"
 
 Write-Host ""
-Write-Host "Just Say It - free, private voice typing" -ForegroundColor Magenta
+Write-Host "Just Say It - free, private voice typing for Windows" -ForegroundColor Magenta
 Write-Host "Created by Stefano Roman Gunness"
 Write-Host ""
-Write-Host "Just Say It is not available for Windows yet." -ForegroundColor Yellow
-Write-Host ""
-Write-Host "The current version is a native Mac app that uses Apple's built-in,"
-Write-Host "on-device speech and AI models. A Windows version is planned."
-Write-Host ""
-Write-Host "In the meantime, Windows has free built-in voice typing:"
-Write-Host "  Press  Windows key + H  in any text box to start dictating."
-Write-Host ""
 
-$repo = "https://github.com/stefanoromang/just-say-it"
-$answer = Read-Host "Open the Just Say It page to follow progress (Watch > Releases)? [Y/n]"
-if ($answer -eq "" -or $answer -match "^[yY]") {
-    Start-Process "$repo"
+if ([Environment]::OSVersion.Version.Build -lt 19041) {
+    Write-Host "Just Say It needs Windows 10 (version 2004) or Windows 11." -ForegroundColor Red
+    exit 1
+}
+if (-not [Environment]::Is64BitOperatingSystem) {
+    Write-Host "Just Say It needs 64-bit Windows." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Finding the latest version..."
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -Headers @{ "User-Agent" = "JustSayIt-Installer" }
+$asset = $release.assets | Where-Object { $_.name -like "JustSayIt-Setup-*.exe" } | Select-Object -First 1
+if (-not $asset) {
+    Write-Host "The Windows installer isn't published yet. Please try again in a few minutes:" -ForegroundColor Yellow
+    Write-Host "https://github.com/$repo/releases"
+    exit 1
+}
+
+$out = Join-Path $env:TEMP $asset.name
+Write-Host "Downloading $($asset.name) ($([math]::Round($asset.size / 1MB)) MB)..."
+Invoke-WebRequest $asset.browser_download_url -OutFile $out -UseBasicParsing
+
+Write-Host "Installing..."
+Start-Process -FilePath $out -ArgumentList "/SILENT", "/TASKS=desktopicon,startup" -Wait
+Remove-Item $out -ErrorAction SilentlyContinue
+
+$exe = Join-Path $env:LOCALAPPDATA "Programs\JustSayIt\JustSayIt.exe"
+if (Test-Path $exe) {
+    Start-Process $exe
+    Write-Host ""
+    Write-Host "Done! Just Say It is running (look for its icon in the system tray)." -ForegroundColor Green
+    Write-Host "The first launch downloads the speech model (~470 MB) once."
+    Write-Host "Click into any text box, hold Right Alt, talk, and let go."
+    Write-Host ""
+    Write-Host "Optional - smarter cleanup, Scribe and Rewrite with a free local AI:"
+    Write-Host "  1. Install Ollama: https://ollama.com/download/windows"
+    Write-Host "  2. Run:  ollama pull llama3.2:3b"
+} else {
+    Write-Host "Installation did not complete. Download the installer manually: https://github.com/$repo/releases" -ForegroundColor Yellow
 }

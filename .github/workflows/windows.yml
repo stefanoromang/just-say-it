@@ -1,0 +1,53 @@
+# Builds "Just Say It" for Windows and attaches the installer to GitHub Releases.
+# Created by Stefano Roman Gunness · MIT License
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish app (self-contained, win-x64)
+        run: dotnet publish windows/JustSayIt/JustSayIt.csproj -c Release -r win-x64 --self-contained true -o windows/dist/JustSayIt
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows\installer\JustSayIt.iss
+
+      - name: Portable zip
+        shell: pwsh
+        run: Compress-Archive -Path windows/dist/JustSayIt/* -DestinationPath windows/dist/JustSayIt-1.0.0-win-x64-portable.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JustSayIt-Windows
+          path: |
+            windows/dist/JustSayIt-Setup-*.exe
+            windows/dist/JustSayIt-*-portable.zip
+
+      - name: Attach to release
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = if ("${{ github.event_name }}" -eq "release") { "${{ github.event.release.tag_name }}" } else { "v1.0" }
+          gh release upload $tag (Get-Item windows/dist/JustSayIt-Setup-*.exe).FullName (Get-Item windows/dist/JustSayIt-*-portable.zip).FullName --clobber
