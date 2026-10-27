@@ -80,7 +80,7 @@ You can change the hotkey, language, tones, dictionary and snippets in the app w
 
 ## Install on Windows
 
-**Easiest:** download **`JustSayIt-Setup-1.0.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. No admin rights needed.
+**Easiest:** download **`JustSayIt-Setup-1.1.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. No admin rights needed.
 
 **Or** open PowerShell and paste:
 

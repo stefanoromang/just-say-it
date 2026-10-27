@@ -14,7 +14,7 @@ public sealed class Transcriber : IDisposable
 {
     public event Action<float>? Level;
 
-    WaveInEvent? wave;
+    WaveIn? wave;
     readonly MemoryStream pcm = new();
     readonly object gate = new();
     WhisperFactory? factory;
@@ -73,7 +73,7 @@ public sealed class Transcriber : IDisposable
     {
         if (IsRecording) return;
         lock (gate) { pcm.SetLength(0); }
-        wave = new WaveInEvent { WaveFormat = new WaveFormat(16000, 16, 1), BufferMilliseconds = 50 };
+        wave = new WaveIn { WaveFormat = new WaveFormat(16000, 16, 1), BufferMilliseconds = 50 };
         wave.DataAvailable += (_, e) =>
         {
             lock (gate) { pcm.Write(e.Buffer, 0, e.BytesRecorded); }

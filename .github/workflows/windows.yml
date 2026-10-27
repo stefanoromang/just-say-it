@@ -17,9 +17,9 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
 
@@ -34,9 +34,9 @@ jobs:
 
       - name: Portable zip
         shell: pwsh
-        run: Compress-Archive -Path windows/dist/JustSayIt/* -DestinationPath windows/dist/JustSayIt-1.0.0-win-x64-portable.zip
+        run: Compress-Archive -Path windows/dist/JustSayIt/* -DestinationPath windows/dist/JustSayIt-1.1.0-win-x64-portable.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: JustSayIt-Windows
           path: |
@@ -49,5 +49,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = if ("${{ github.event_name }}" -eq "release") { "${{ github.event.release.tag_name }}" } else { "v1.0" }
+          $tag = if ("${{ github.event_name }}" -eq "release") { "${{ github.event.release.tag_name }}" } else { (gh release view --json tagName -q .tagName) }
           gh release upload $tag (Get-Item windows/dist/JustSayIt-Setup-*.exe).FullName (Get-Item windows/dist/JustSayIt-*-portable.zip).FullName --clobber
