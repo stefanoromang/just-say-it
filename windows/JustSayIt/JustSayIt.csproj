@@ -19,7 +19,7 @@
     <Authors>Stefano Roman Gunness</Authors>
     <Copyright>© 2026 Stefano Roman Gunness. MIT License.</Copyright>
     <Description>Free, private voice typing for Windows.</Description>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>

@@ -57,7 +57,7 @@ struct MenuContent: View {
             NSApp.activate(ignoringOtherApps: true)
             NSApp.orderFrontStandardAboutPanel(options: [
                 .applicationName: "Just Say It",
-                .credits: NSAttributedString(string: "Created by Stefano Roman Gunness\nFree, private voice typing for Mac."),
+                .credits: NSAttributedString(string: "Created by Stefano Roman Gunness\nFree, private voice typing for Mac and Windows."),
             ])
         }
         Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q")

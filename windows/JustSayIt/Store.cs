@@ -119,6 +119,7 @@ public class Prefs
     public bool AutoInsert { get; set; } = true;
     public bool ShowResultCard { get; set; } = true;
     public bool StartWithWindows { get; set; } = true;
+    public bool UseScreenContext { get; set; } = true;
     public Dictionary<AppCategory, Tone> Tones { get; set; } = new()
     {
         [AppCategory.Email] = Tone.Professional, [AppCategory.Work] = Tone.Professional,

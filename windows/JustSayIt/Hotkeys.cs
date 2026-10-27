@@ -42,6 +42,15 @@ public sealed class Hotkeys : IDisposable
 
     public Hotkeys() { proc = Callback; }
 
+    // Windows removes a low-level hook that takes too long, so events are handed
+    // to the UI thread and the hook returns immediately.
+    static void Later(Action? a)
+    {
+        if (a == null) return;
+        if (Ui.Context != null) Ui.Context.Post(_ => a(), null);
+        else ThreadPool.QueueUserWorkItem(_ => a());
+    }
+
     public void Install()
     {
         if (hook != IntPtr.Zero) return;
@@ -67,12 +76,12 @@ public sealed class Hotkeys : IDisposable
         if (isDown && vk == 0x1B && Recording) // Esc
         {
             Reset();
-            CancelRecording?.Invoke();
+            Later(CancelRecording);
             return 1;
         }
         if (isDown && vk == 'R' && Down(0x11) && Down(0x12) && !Down(0x5B)) // Ctrl+Alt+R
         {
-            Rewrite?.Invoke();
+            Later(Rewrite);
             return 1;
         }
         if (vk != hot) return CallNextHookEx(hook, code, wParam, lParam);
@@ -86,7 +95,7 @@ public sealed class Hotkeys : IDisposable
             if (Recording && handsFree)
             {
                 Reset();
-                Stop?.Invoke();
+                Later(Stop);
                 return 1;
             }
             if (!Recording)
@@ -95,7 +104,7 @@ public sealed class Hotkeys : IDisposable
                 bool doubleTap = (now - lastTapUp).TotalMilliseconds < 350;
                 Recording = true;
                 handsFree = doubleTap;
-                Start?.Invoke(scribe, doubleTap);
+                var st = Start; Later(() => st?.Invoke(scribe, doubleTap));
             }
             return 1; // swallow so Right Alt doesn't open menus
         }
@@ -108,12 +117,12 @@ public sealed class Hotkeys : IDisposable
             {
                 lastTapUp = now;
                 Reset();
-                CancelRecording?.Invoke();
+                Later(CancelRecording);
                 return 1;
             }
             lastTapUp = DateTime.MinValue;
             Reset();
-            Stop?.Invoke();
+            Later(Stop);
             return 1;
         }
         return CallNextHookEx(hook, code, wParam, lParam);

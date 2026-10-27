@@ -1,0 +1,1 @@
+../../Sources/JustSayIt/Store.swift

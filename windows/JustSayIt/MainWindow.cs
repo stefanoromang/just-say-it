@@ -344,6 +344,7 @@ public sealed class MainWindow : Form
             return cb;
         }
         Row("", Check("Smart AI cleanup (fillers, corrections, lists, tone)", p.AiCleanup, v => p.AiCleanup = v));
+        Row("", Check("Use what's on screen as context (offline Windows OCR)", p.UseScreenContext, v => p.UseScreenContext = v));
         Row("", Check("Insert automatically into the selected text box", p.AutoInsert, v => p.AutoInsert = v));
         Row("", Check("Always show the result card (edit, copy, rewrite)", p.ShowResultCard, v => p.ShowResultCard = v));
         Row("", Check("Play start/stop sounds", p.PlaySounds, v => p.PlaySounds = v));
@@ -352,7 +353,7 @@ public sealed class MainWindow : Form
         f.Controls.Add(grid);
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 1.1 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 1.2 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

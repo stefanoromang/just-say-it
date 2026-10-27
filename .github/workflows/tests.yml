@@ -1,0 +1,39 @@
+# Runs Just Say It's tests on every push and pull request.
+# Created by Stefano Roman Gunness · MIT License
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows-rules:
+    name: Text rules (Windows app)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet test windows/JustSayIt.Tests/JustSayIt.Tests.csproj
+
+  windows-build:
+    name: Build (Windows app)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet build windows/JustSayIt/JustSayIt.csproj -c Release
+
+  mac:
+    name: Build + text rules (Mac app)
+    runs-on: macos-26
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - run: swift build -c release
+      - run: swift run -c release RuleTests

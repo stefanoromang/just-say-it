@@ -26,6 +26,7 @@ public sealed class Controller : IDisposable
     DateTime startedAt;
     string lastRaw = "";
     bool busy;
+    Task<string?>? screenTask;
 
     public void Boot()
     {
@@ -103,6 +104,8 @@ public sealed class Controller : IDisposable
             startedAt = DateTime.Now;
             ctx = ContextReader.Capture();
             LastContext = Describe(ctx);
+            var hwnd = ctx.Window;
+            screenTask = store.Prefs.UseScreenContext ? Task.Run(() => ScreenReader.Read(hwnd)) : null;
             try { Transcriber.Start(); }
             catch (Exception e)
             {
@@ -142,6 +145,12 @@ public sealed class Controller : IDisposable
                 return;
             }
             lastRaw = raw;
+            if (screenTask != null)
+            {
+                var done = await Task.WhenAny(screenTask, Task.Delay(1500));
+                if (done == screenTask) ctx.ScreenText = await screenTask;
+                screenTask = null;
+            }
             var text = await Process(raw);
             if (string.IsNullOrWhiteSpace(text)) { await Ui.Run(() => Overlay.ShowState(OverlayState.Hidden)); return; }
             LastResult = text;
@@ -229,6 +238,7 @@ public sealed class Controller : IDisposable
         if (c.SelectedText != null) parts.Add("selection captured");
         if (c.FieldIsEditable == true) parts.Add("text box ✓");
         else if (c.FieldIsEditable == false) parts.Add("no text box");
+        if (store.Prefs.UseScreenContext) parts.Add("screen read");
         return string.Join(" · ", parts);
     }
 

@@ -80,7 +80,7 @@ You can change the hotkey, language, tones, dictionary and snippets in the app w
 
 ## Install on Windows
 
-**Easiest:** download **`JustSayIt-Setup-1.1.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. No admin rights needed.
+**Easiest:** download **`JustSayIt-Setup-1.2.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. No admin rights needed.
 
 **Or** open PowerShell and paste:
 
@@ -96,7 +96,8 @@ A **portable zip** is on the release page too, if you'd rather not install it.
 
 1. Just Say It opens and downloads the speech model once (~470 MB). Look for its icon in the **system tray**.
 2. Click into any text box, **hold Right Alt**, talk, and let go.
-3. *(Optional, recommended)* For smart cleanup, Scribe and Rewrite, install the free local AI:
+3. *(Optional)* Screen context is on by default: it reads the visible email or chat with Windows' offline OCR so names are spelled right. Turn it off in Settings if you prefer.
+4. *(Optional, recommended)* For smart cleanup, Scribe and Rewrite, install the free local AI:
    - Install [Ollama for Windows](https://ollama.com/download/windows)
    - Open a terminal and run `ollama pull llama3.2:3b`
 
@@ -119,7 +120,7 @@ You can change the hotkey (Right Alt, Right Ctrl, F8 or Scroll Lock), speech mod
 ## Privacy
 
 - **Mac:** speech by Apple's on-device `SpeechAnalyzer`; cleanup, Scribe and Rewrite by Apple's on-device Foundation Models; screen context read locally with Vision.
-- **Windows:** speech by Whisper running locally (whisper.cpp); cleanup by a local Ollama model on `localhost`. The only network use is the one-time model download.
+- **Windows:** speech by Whisper running locally (whisper.cpp); screen context by Windows' built-in offline OCR; cleanup by a local Ollama model on `localhost`. The only network use is the one-time model download.
 - No servers, no analytics, no accounts. Settings and history stay on your computer (`~/Library/Application Support/JustSayIt` on Mac, `%LOCALAPPDATA%\JustSayIt` on Windows).
 
 ## Build from source
@@ -168,11 +169,21 @@ The Windows app is C# / WinForms, using [Whisper.net](https://github.com/sandroh
 | `windows/JustSayIt/Transcriber.cs` | Microphone + on-device Whisper |
 | `windows/JustSayIt/TextBrain.cs` | Filler removal, corrections, tone, Scribe, Rewrite (Ollama) |
 | `windows/JustSayIt/Context.cs` | Reads app, browser URL, selection and text box via UI Automation |
+| `windows/JustSayIt/ScreenReader.cs` | Reads the visible window text with offline Windows OCR |
 | `windows/JustSayIt/Inserter.cs` | Pastes into the focused text box |
 | `windows/JustSayIt/Hotkeys.cs` | Global hold / double-tap / Scribe / Esc hotkeys |
 | `windows/JustSayIt/Overlay.cs` | Floating recording pill |
 | `windows/JustSayIt/ResultCard.cs` | Result card (Insert / Copy / Rewrite) |
 | `windows/JustSayIt/Store.cs` | Settings, dictionary, snippets, history |
+
+## Tests
+
+```bash
+swift run RuleTests                                          # Mac text rules
+dotnet test windows/JustSayIt.Tests/JustSayIt.Tests.csproj   # Windows text rules
+```
+
+Both run automatically on GitHub for every change. See [CHANGELOG.md](CHANGELOG.md) for what's new.
 
 ## Uninstall
 

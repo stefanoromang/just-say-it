@@ -20,6 +20,7 @@ public class CaptureContext
     public string? SelectedText;
     public string? TextBeforeCursor;
     public bool? FieldIsEditable;
+    public string? ScreenText;
     public AppCategory Category = AppCategory.Other;
 
     public string? Host
@@ -42,6 +43,8 @@ public class CaptureContext
             sb.AppendLine("Text already in the box before the cursor:\n\"\"\"\n" + Tail(TextBeforeCursor.Trim(), 600) + "\n\"\"\"");
         if (!string.IsNullOrEmpty(SelectedText))
             sb.AppendLine("Text the user selected:\n\"\"\"\n" + Trunc(SelectedText, 1500) + "\n\"\"\"");
+        if (!string.IsNullOrWhiteSpace(ScreenText))
+            sb.AppendLine("Visible on screen (OCR, may be noisy):\n\"\"\"\n" + Trunc(ScreenText, 1200) + "\n\"\"\"");
         return sb.ToString().TrimEnd();
     }
 
@@ -75,9 +78,17 @@ public static class ContextReader
         GetWindowText(c.Window, sb, sb.Capacity);
         c.WindowTitle = sb.ToString();
 
-        // UI Automation can be slow on some apps; cap it so the hotkey always feels instant.
-        var task = Task.Run(() => ReadAutomation(c));
-        task.Wait(TimeSpan.FromMilliseconds(400));
+        // UI Automation can be slow on some apps; read into a copy on a background
+        // thread and cap the wait so the hotkey always feels instant.
+        var probe = new CaptureContext { Window = c.Window, ProcessName = c.ProcessName };
+        var task = Task.Run(() => ReadAutomation(probe));
+        if (task.Wait(TimeSpan.FromMilliseconds(450)))
+        {
+            c.SelectedText = probe.SelectedText;
+            c.TextBeforeCursor = probe.TextBeforeCursor;
+            c.FieldIsEditable = probe.FieldIsEditable;
+            c.Url = probe.Url;
+        }
         c.Category = Classify(c);
         return c;
     }
