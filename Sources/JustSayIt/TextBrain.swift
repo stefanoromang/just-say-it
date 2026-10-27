@@ -113,11 +113,20 @@ enum TextBrain {
         warm = s
     }
 
+    /// Deterministic output. The initializer label changed between Apple SDKs (Swift 6.2 vs 6.4).
+    private static func greedyOptions() -> GenerationOptions {
+        #if compiler(>=6.4)
+        return GenerationOptions(samplingMode: .greedy, temperature: 0)
+        #else
+        return GenerationOptions(sampling: .greedy, temperature: 0)
+        #endif
+    }
+
     private static func run(_ instructions: String, _ prompt: String) async -> String? {
         guard aiAvailable else { return nil }
         let session = LanguageModelSession(model: SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations), instructions: instructions)
         do {
-            let r = try await session.respond(to: prompt, options: GenerationOptions(samplingMode: .greedy, temperature: 0))
+            let r = try await session.respond(to: prompt, options: greedyOptions())
             let t = r.content.trimmingCharacters(in: .whitespacesAndNewlines)
             return t.isEmpty ? nil : stripWrapping(t)
         } catch {
