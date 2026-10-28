@@ -3,11 +3,12 @@ import Speech
 import SwiftUI
 
 enum Pane: String, CaseIterable, Identifiable {
-    case home = "Home", style = "Tone & Style", dictionary = "Dictionary", snippets = "Snippets", rewrite = "AI Rewrite", history = "History", settings = "Settings"
+    case home = "Home", notes = "Note Taker", style = "Tone & Style", dictionary = "Dictionary", snippets = "Snippets", rewrite = "AI Rewrite", history = "History", settings = "Settings"
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .home: "house"
+        case .notes: "note.text"
         case .style: "theatermasks"
         case .dictionary: "character.book.closed"
         case .snippets: "text.badge.plus"
@@ -34,6 +35,7 @@ struct MainView: View {
                 Group {
                     switch ui.pane {
                     case .home: HomePane(c: c, store: store)
+                    case .notes: NotesPane(store: store)
                     case .style: StylePane(store: store)
                     case .dictionary: DictionaryPane(store: store)
                     case .snippets: SnippetsPane(store: store)
@@ -98,6 +100,7 @@ struct HomePane: View {
                     Label("Hold **⇧ Shift + \(store.prefs.hotkey.label)** for **Scribe**: say what you want, get a polished message.", systemImage: "wand.and.stars")
                     Label("Say **\"scratch that\"** to drop the last sentence, **\"new line\"** / **\"new paragraph\"** for layout.", systemImage: "arrow.uturn.backward")
                     Label("Select text and press **⌃⌥R** to make it concise (more styles in the menu bar).", systemImage: "text.redaction")
+                    Label("Press **Right ⇧ Shift three times** to start the **Note Taker**; press it three times again to stop.", systemImage: "note.text")
                 }
                 .padding(6)
             }
@@ -410,6 +413,8 @@ struct SettingsPane: View {
             Toggle("Insert automatically into the selected text box", isOn: $store.prefs.autoInsert)
             Toggle("Always show the result card (to edit, copy or rewrite)", isOn: $store.prefs.showResultCard)
             Toggle("Use what's on screen as context (needs Screen Recording)", isOn: $store.prefs.useScreenContext)
+            Toggle("Note Taker: Right ⇧ Shift × 3 starts/stops it", isOn: $store.prefs.noteTakerEnabled)
+            Toggle("Note Taker: also record computer audio (the other people on a call)", isOn: $store.prefs.noteCaptureSystemAudio)
             Toggle("Play start/stop sounds", isOn: $store.prefs.playSounds)
             Toggle("Restore my clipboard after inserting", isOn: $store.prefs.restoreClipboard)
             Text(c.modelStatus).font(.caption).foregroundStyle(.secondary)
@@ -434,4 +439,52 @@ final class UIState: ObservableObject {
     @Published var output = ""
     @Published var busy = false
     @Published var locales: [Locale] = []
+}
+
+// MARK: Note Taker
+
+struct NotesPane: View {
+    @ObservedObject var store: Store
+    @ObservedObject var n = NoteTaker.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Press **Right ⇧ Shift three times** to start recording a conversation, and three times again to stop. You get a live transcript, then a summary with key points, decisions and action items.")
+                .foregroundStyle(.secondary)
+            HStack {
+                Button { n.toggle() } label: {
+                    Label(n.isRecording ? "Stop Note Taker" : "Start Note Taker", systemImage: n.isRecording ? "stop.fill" : "record.circle")
+                }
+                .buttonStyle(.borderedProminent).tint(n.isRecording ? .red : .purple)
+                Button("Show live window") { NoteWindow.shared.show() }
+                Button("Open notes folder") { NSWorkspace.shared.open(NoteTaker.notesDir) }
+            }
+            GroupBox("What gets recorded") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("**Me:** your microphone", systemImage: "mic")
+                    Label(store.prefs.noteCaptureSystemAudio
+                          ? (ContextReader.hasScreenAccess ? "**Others:** computer audio (Zoom, Meet, Teams…)" : "**Others:** needs Screen Recording permission (Home › Fix)")
+                          : "**Others:** off (turn on in Settings)", systemImage: "speaker.wave.2")
+                    Text("Everything is transcribed on this Mac. Notes are saved as Markdown in Documents › Just Say It Notes. Always tell people when you're recording them.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+            Text("Saved notes").font(.headline)
+            if n.saved.isEmpty {
+                Text("No notes yet.").foregroundStyle(.secondary)
+            }
+            ForEach(n.saved) { note in
+                HStack {
+                    Image(systemName: "doc.text")
+                    Text(note.title)
+                    Spacer()
+                    Text(note.date, style: .relative).font(.caption).foregroundStyle(.secondary)
+                    Button("Open") { NSWorkspace.shared.open(note.url) }
+                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([note.url]) }
+                }
+            }
+        }
+        .onAppear { n.refreshSaved() }
+    }
 }

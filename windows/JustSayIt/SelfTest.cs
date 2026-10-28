@@ -130,6 +130,31 @@ public static class SelfTest
             return (starts == 1 && stops == 1, $"start={starts} stop={stops}");
         });
 
+        await Step("Note Taker: Right Shift ×3 toggles it", async () =>
+        {
+            using var hk = new Hotkeys();
+            int fired = 0;
+            hk.TripleShift += () => fired++;
+            hk.Install();
+            await Pump(200);
+            for (int i = 0; i < 3; i++) { SendKey(0xA1, false, extended: false); await Pump(60); SendKey(0xA1, true, extended: false); await Pump(120); }
+            await Pump(300);
+            int afterTriple = fired;
+            // Slow taps must not trigger it.
+            for (int i = 0; i < 3; i++) { SendKey(0xA1, false, extended: false); await Pump(60); SendKey(0xA1, true, extended: false); await Pump(700); }
+            await Pump(200);
+            return (afterTriple == 1 && fired == 1, $"triple={afterTriple} afterSlow={fired}");
+        });
+
+        await Step("Note Taker: transcribes a conversation", async () =>
+        {
+            var samples = await Task.Run(() => Synthesize("Today we decided to launch on March third. Maria will prepare the press release by Friday."));
+            using var t = new Transcriber();
+            var text = (await t.TranscribeSamples(samples, ModelSize.Base, "en", Array.Empty<string>())).ToLowerInvariant();
+            bool ok = text.Contains("march") && text.Contains("press release") && text.Contains("friday");
+            return (ok, $"\"{text}\"");
+        }, 240);
+
         await Step("Overlay and result card render", async () =>
         {
             var c = Controller.Shared;
@@ -193,7 +218,8 @@ public static class SelfTest
         SetForegroundWindow(h);
     }
 
-    static void SendKey(byte vk, bool up) => keybd_event(vk, 0, (up ? 2u : 0u) | 1u /*EXTENDED*/, UIntPtr.Zero);
+    static void SendKey(byte vk, bool up, bool extended = true) =>
+        keybd_event(vk, 0, (up ? 2u : 0u) | (extended ? 1u : 0u), UIntPtr.Zero);
 
     /// A text-box window running on its own STA thread with its own message loop.
     sealed class Target

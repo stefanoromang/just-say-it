@@ -36,8 +36,11 @@ struct MenuContent: View {
     var body: some View {
         Text("Hold \(store.prefs.hotkey.label) to talk")
         Text("Double-tap for hands-free · add ⇧ for Scribe")
+        Text("Press Right ⇧ three times for the Note Taker")
         Divider()
         Button("Start / Stop Dictation") { c.toggleFromMenu() }
+        Button(NoteTaker.shared.isRecording ? "Stop Note Taker" : "Start Note Taker (Right ⇧ ×3)") { c.toggleNotes() }
+        Button("Show Note Taker") { NoteWindow.shared.show() }
         Menu("Rewrite Selected Text") {
             ForEach(RewriteStyle.allCases) { s in
                 Button(s.label) { c.rewriteSelection(s) }

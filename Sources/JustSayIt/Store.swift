@@ -139,6 +139,8 @@ struct Prefs: Codable {
     var autoInsert = true
     var showResultCard = true
     var useScreenContext = true
+    var noteTakerEnabled = true
+    var noteCaptureSystemAudio = true
 
     init() {}
 
@@ -161,6 +163,8 @@ struct Prefs: Codable {
         autoInsert = (try? c.decode(Bool.self, forKey: .autoInsert)) ?? def.autoInsert
         showResultCard = (try? c.decode(Bool.self, forKey: .showResultCard)) ?? def.showResultCard
         useScreenContext = (try? c.decode(Bool.self, forKey: .useScreenContext)) ?? def.useScreenContext
+        noteTakerEnabled = (try? c.decode(Bool.self, forKey: .noteTakerEnabled)) ?? def.noteTakerEnabled
+        noteCaptureSystemAudio = (try? c.decode(Bool.self, forKey: .noteCaptureSystemAudio)) ?? def.noteCaptureSystemAudio
     }
 }
 

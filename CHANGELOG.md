@@ -2,6 +2,19 @@
 
 All notable changes to **Just Say It** (created by Stefano Roman Gunness).
 
+## 1.4 – 2026-10-28
+
+### New: Note Taker (Mac and Windows)
+- **Press Right Shift three times** to start recording a conversation; three times again to stop.
+- **Live transcript** in a floating window with a timer, labelled **Me** (your microphone) and **Others** (computer audio: the other people on a Zoom, Meet or Teams call).
+- **Automatic meeting notes** when you stop: Summary, Key points, Decisions and Action items (Apple Intelligence on Mac, local Ollama on Windows).
+- **Saved as Markdown** in Documents › Just Say It Notes, updated while you talk so nothing is lost.
+- New **Note Taker** tab with saved notes, plus settings to turn off the shortcut or computer-audio capture.
+- Everything is transcribed on your computer.
+
+### Testing
+- Windows self-test now also checks the Right Shift ×3 shortcut and conversation transcription.
+
 ## 1.3 – 2026-10-28
 
 ### Windows – important fixes

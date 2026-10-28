@@ -17,6 +17,10 @@ public sealed class Hotkeys : IDisposable
     public event Action? Stop;
     public event Action? CancelRecording;
     public event Action? Rewrite;
+    public event Action? TripleShift;
+
+    readonly List<DateTime> shiftTaps = new();
+    DateTime? shiftDownAt;
 
     public HotkeyChoice Hotkey = HotkeyChoice.RightAlt;
     public bool Recording { get; private set; }
@@ -84,6 +88,12 @@ public sealed class Hotkeys : IDisposable
             Later(Rewrite);
             return 1;
         }
+        if (vk == 0xA1) // VK_RSHIFT – three quick taps toggle the Note Taker
+        {
+            HandleRightShift(isDown, isUp);
+            return CallNextHookEx(hook, code, wParam, lParam);
+        }
+        if (isDown && vk != hot && vk != 0xA0) shiftTaps.Clear(); // typing breaks the sequence
         if (vk != hot) return CallNextHookEx(hook, code, wParam, lParam);
 
         var now = DateTime.Now;
@@ -126,6 +136,27 @@ public sealed class Hotkeys : IDisposable
             return 1;
         }
         return CallNextHookEx(hook, code, wParam, lParam);
+    }
+
+    void HandleRightShift(bool isDown, bool isUp)
+    {
+        var now = DateTime.Now;
+        if (isDown)
+        {
+            if (shiftDownAt == null) shiftDownAt = now; // ignore auto-repeat
+            return;
+        }
+        if (!isUp || shiftDownAt == null) return;
+        var held = (now - shiftDownAt.Value).TotalMilliseconds;
+        shiftDownAt = null;
+        if (held >= 350 || Down(0x11) || Down(0x12) || Down(0x5B)) { shiftTaps.Clear(); return; }
+        shiftTaps.RemoveAll(t => (now - t).TotalMilliseconds >= 900);
+        shiftTaps.Add(now);
+        if (shiftTaps.Count >= 3)
+        {
+            shiftTaps.Clear();
+            Later(TripleShift);
+        }
     }
 
     public void Dispose()

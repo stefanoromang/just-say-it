@@ -28,6 +28,7 @@ public sealed class MainWindow : Form
         BackColor = Color.White;
 
         tabs.TabPages.Add(HomeTab());
+        tabs.TabPages.Add(NotesTab());
         tabs.TabPages.Add(StyleTab());
         tabs.TabPages.Add(DictionaryTab());
         tabs.TabPages.Add(SnippetsTab());
@@ -96,6 +97,7 @@ public sealed class MainWindow : Form
             "↩  Say \"scratch that\" to drop the last sentence; \"new line\" / \"new paragraph\" for layout.",
             "✂  Select text and hold the key to give an instruction (\"make this shorter\").",
             "🪄  Select text and press Ctrl+Alt+R to make it concise (more styles in the tray menu).",
+            "📝  Press Right Shift three times to start the Note Taker; three times again to stop.",
         }) how.Controls.Add(L(line, null, null, 760));
         f.Controls.Add(Group("How to use", how));
 
@@ -120,6 +122,38 @@ public sealed class MainWindow : Form
         int wpm = p.TotalSeconds > 5 ? (int)(p.TotalWords / (p.TotalSeconds / 60)) : 0;
         if (statsLabel != null) statsLabel.Text = $"{p.TotalWords} words dictated   ·   {(wpm > 0 ? wpm.ToString() : "–")} words/min   ·   {p.TotalWords / 40} min saved vs typing";
         if (lastLabel != null) lastLabel.Text = string.IsNullOrEmpty(c.LastResult) ? "" : $"Last dictation ({c.LastContext}):\n{c.LastResult}";
+    }
+
+    // MARK: Note Taker
+
+    TabPage NotesTab()
+    {
+        var page = new TabPage("Note Taker");
+        var f = Flow();
+        f.Controls.Add(L("Press Right Shift three times to record a conversation, and three times again to stop. You get a live transcript, then a summary with key points, decisions and action items.", null, Color.DimGray));
+        var row = new FlowLayoutPanel { AutoSize = true };
+        var toggle = new Button { Text = "Start / Stop Note Taker", AutoSize = true };
+        toggle.Click += (_, _) => c.ToggleNotes();
+        var show = new Button { Text = "Show live window", AutoSize = true };
+        show.Click += (_, _) => NoteWindow.ShowShared();
+        var folder = new Button { Text = "Open notes folder", AutoSize = true };
+        folder.Click += (_, _) => Open(NoteTaker.NotesDir);
+        row.Controls.AddRange(new Control[] { toggle, show, folder });
+        f.Controls.Add(row);
+        f.Controls.Add(L("Me: your microphone · Others: computer audio (Zoom, Meet, Teams…). Transcribed on this PC; notes are saved as Markdown in Documents › Just Say It Notes. Always tell people when you're recording them.", Small, Color.Gray));
+        var list = new ListBox { Width = 800, Height = 300 };
+        void Reload()
+        {
+            list.Items.Clear();
+            foreach (var file in Directory.GetFiles(NoteTaker.NotesDir, "*.md").OrderByDescending(File.GetLastWriteTime))
+                list.Items.Add(Path.GetFileName(file));
+        }
+        page.Enter += (_, _) => Reload();
+        list.DoubleClick += (_, _) => { if (list.SelectedItem is string n) Open(Path.Combine(NoteTaker.NotesDir, n)); };
+        f.Controls.Add(L("Saved notes (double-click to open)", H2));
+        f.Controls.Add(list);
+        page.Controls.Add(f);
+        return page;
     }
 
     // MARK: Tone & Style
@@ -345,6 +379,8 @@ public sealed class MainWindow : Form
         }
         Row("", Check("Smart AI cleanup (fillers, corrections, lists, tone)", p.AiCleanup, v => p.AiCleanup = v));
         Row("", Check("Use what's on screen as context (offline Windows OCR)", p.UseScreenContext, v => p.UseScreenContext = v));
+        Row("", Check("Note Taker: Right Shift × 3 starts/stops it", p.NoteTakerEnabled, v => p.NoteTakerEnabled = v));
+        Row("", Check("Note Taker: also record computer audio (the other people on a call)", p.NoteCaptureSystemAudio, v => p.NoteCaptureSystemAudio = v));
         Row("", Check("Insert automatically into the selected text box", p.AutoInsert, v => p.AutoInsert = v));
         Row("", Check("Always show the result card (edit, copy, rewrite)", p.ShowResultCard, v => p.ShowResultCard = v));
         Row("", Check("Play start/stop sounds", p.PlaySounds, v => p.PlaySounds = v));
@@ -353,7 +389,7 @@ public sealed class MainWindow : Form
         f.Controls.Add(grid);
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 1.3 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 1.4 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

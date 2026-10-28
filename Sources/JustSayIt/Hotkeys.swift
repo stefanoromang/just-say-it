@@ -14,6 +14,36 @@ final class Hotkeys {
     var onStop: (() -> Void)?
     var onCancel: (() -> Void)?
     var onRewrite: (() -> Void)?
+    var onTripleShift: (() -> Void)?
+
+    private var rightShiftTaps: [Date] = []
+    private var rightShiftDownAt: Date?
+
+    /// Right Shift pressed three times within ~0.9 s (each a quick tap) → Note Taker.
+    private func handleRightShift(_ e: NSEvent) {
+        let now = Date()
+        // Right Shift sets the device-dependent bit 0x04 while held.
+        let down = (e.modifierFlags.rawValue & 0x04) != 0
+        if down {
+            rightShiftDownAt = now
+            return
+        }
+        if rightShiftDownAt == nil { return }
+        // A long press (normal Shift use) resets the count.
+        guard let d = rightShiftDownAt, now.timeIntervalSince(d) < 0.35 else {
+            rightShiftDownAt = nil
+            rightShiftTaps.removeAll()
+            return
+        }
+        rightShiftDownAt = nil
+        let others = e.modifierFlags.intersection([.command, .control, .option])
+        guard others.isEmpty else { rightShiftTaps.removeAll(); return }
+        rightShiftTaps = rightShiftTaps.filter { now.timeIntervalSince($0) < 0.9 } + [now]
+        if rightShiftTaps.count >= 3 {
+            rightShiftTaps.removeAll()
+            onTripleShift?()
+        }
+    }
 
     var hotkey: HotkeyChoice = .rightOption
     private(set) var recording = false
@@ -61,6 +91,12 @@ final class Hotkeys {
                 onRewrite?()
                 return true
             }
+            // Any other key between Shift taps breaks the sequence (normal typing).
+            rightShiftTaps.removeAll()
+            return false
+        }
+        if e.type == .flagsChanged, e.keyCode == 60 { // Right Shift
+            handleRightShift(e)
             return false
         }
         guard e.type == .flagsChanged, e.keyCode == hotkey.keyCode else { return false }

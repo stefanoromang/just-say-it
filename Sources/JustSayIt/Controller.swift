@@ -38,6 +38,7 @@ final class Controller: ObservableObject {
         hotkeys.onStop = { [weak self] in self?.finish() }
         hotkeys.onCancel = { [weak self] in self?.cancel() }
         hotkeys.onRewrite = { [weak self] in self?.rewriteSelection(.concise) }
+        hotkeys.onTripleShift = { [weak self] in self?.toggleNotes() }
         hotkeys.install()
 
         result.onInsert = { [weak self] in self?.insertFromPanel() }
@@ -88,6 +89,15 @@ final class Controller: ObservableObject {
         hotkeys.hotkey = h
     }
 
+    // MARK: Note Taker
+
+    func toggleNotes() {
+        guard store.prefs.noteTakerEnabled else { return }
+        guard micGranted else { requestMic(); overlay.show(.error("Allow microphone access")); return }
+        if transcriber.isRunning { return }
+        NoteTaker.shared.toggle()
+    }
+
     // MARK: Dictation flow
 
     func toggleFromMenu() {
@@ -101,6 +111,7 @@ final class Controller: ObservableObject {
 
     private func begin(scribe: Bool, handsFree: Bool) {
         guard micGranted else { requestMic(); overlay.show(.error("Allow microphone access")); hotkeys.reset(); return }
+        if NoteTaker.shared.isRecording { overlay.show(.error("Note Taker is recording – press Right ⇧ ×3 to stop")); hotkeys.reset(); return }
         if result.isVisible { result.hide() }
         self.scribe = scribe
         startedAt = Date()

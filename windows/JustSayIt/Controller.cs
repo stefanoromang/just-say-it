@@ -36,6 +36,7 @@ public sealed class Controller : IDisposable
         Hotkeys.Stop += () => _ = Finish();
         Hotkeys.CancelRecording += Cancel;
         Hotkeys.Rewrite += () => _ = RewriteSelection(RewriteStyle.Concise);
+        Hotkeys.TripleShift += ToggleNotes;
         Hotkeys.Install();
 
         Card.InsertClicked += () => _ = InsertFromCard();
@@ -80,6 +81,15 @@ public sealed class Controller : IDisposable
         try { (start ? SystemSounds.Asterisk : SystemSounds.Exclamation).Play(); } catch { }
     }
 
+    // MARK: Note Taker
+
+    public void ToggleNotes()
+    {
+        if (!store.Prefs.NoteTakerEnabled || Transcriber.IsRecording) return;
+        if (!NoteTaker.Shared.IsRecording) NoteWindow.ShowShared();
+        NoteTaker.Shared.Toggle();
+    }
+
     // MARK: Dictation flow
 
     public void ToggleFromMenu()
@@ -93,6 +103,12 @@ public sealed class Controller : IDisposable
         Ui.Run(() =>
         {
             if (busy) { Hotkeys.Reset(); return; }
+            if (NoteTaker.Shared.IsRecording)
+            {
+                Overlay.ShowState(OverlayState.Error, "Note Taker is recording – press Right Shift ×3 to stop");
+                Hotkeys.Reset();
+                return;
+            }
             if (!ModelReady)
             {
                 Overlay.ShowState(OverlayState.Error, "Speech model still downloading – see the Just Say It window");

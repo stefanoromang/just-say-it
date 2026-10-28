@@ -254,6 +254,21 @@ public static class TextBrain
         return output == null ? null : RemovePlaceholders(output);
     }
 
+    public static Task<string?> SummarizeMeeting(string transcript) => Run("""
+        You write meeting notes from a transcript. Lines starting with "Me:" are the user; "Others:" is everyone else.
+        Write in Markdown with exactly these sections:
+        ## Summary
+        (3–5 sentences)
+        ## Key points
+        (bullets)
+        ## Decisions
+        (bullets, or "None")
+        ## Action items
+        (bullets as "- [ ] who – what – when", or "None")
+        List every task anyone agreed to do as an action item, including tasks for people other than the speaker.
+        Use only information from the transcript. Do not invent names, dates or numbers.
+        """, transcript);
+
     public static Task<string?> Rewrite(string text, RewriteStyle style) =>
         Run($"{Labels.Instruction(style)} Keep the original meaning and language. Output ONLY the rewritten text with no commentary or quotes.", text);
 }

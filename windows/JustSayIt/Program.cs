@@ -94,8 +94,11 @@ sealed class TrayApp : ApplicationContext
         var hk = Labels.Of(Store.Shared.Prefs.Hotkey);
         menu.Items.Add(new ToolStripMenuItem($"Hold {hk} to talk") { Enabled = false });
         menu.Items.Add(new ToolStripMenuItem("Double-tap for hands-free · add Shift for Scribe") { Enabled = false });
+        menu.Items.Add(new ToolStripMenuItem("Right Shift ×3 for the Note Taker") { Enabled = false });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Start / Stop Dictation", null, (_, _) => c.ToggleFromMenu());
+        menu.Items.Add(NoteTaker.Shared.IsRecording ? "Stop Note Taker" : "Start Note Taker (Right Shift ×3)", null, (_, _) => c.ToggleNotes());
+        menu.Items.Add("Show Note Taker", null, (_, _) => NoteWindow.ShowShared());
         var rw = new ToolStripMenuItem("Rewrite Selected Text");
         foreach (RewriteStyle s in Enum.GetValues<RewriteStyle>())
         {
@@ -106,7 +109,7 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open Just Say It…", null, (_, _) => ShowWindow());
         menu.Items.Add("About Just Say It", null, (_, _) =>
-            MessageBox.Show("Just Say It 1.3\n\nCreated by Stefano Roman Gunness\nFree, private voice typing.\n\n© 2026 Stefano Roman Gunness · MIT License\nhttps://github.com/stefanoromang/just-say-it",
+            MessageBox.Show("Just Say It 1.4\n\nCreated by Stefano Roman Gunness\nFree, private voice typing.\n\n© 2026 Stefano Roman Gunness · MIT License\nhttps://github.com/stefanoromang/just-say-it",
                 "About Just Say It", MessageBoxButtons.OK, MessageBoxIcon.Information));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => ExitThread());

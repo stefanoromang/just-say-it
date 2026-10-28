@@ -31,6 +31,7 @@ Everything runs **on your computer**. There's no account, no subscription, no wo
 - **Snippets.** Say a short phrase to insert an address, a link, or a signature.
 - **Hotkeys.** Hold to talk, double-tap for hands-free, Shift for Scribe, Esc to cancel.
 - **Many languages**, all processed on-device (40+ on Mac, ~100 with auto-detect on Windows).
+- **Note Taker.** Press **Right Shift three times** to record and transcribe a conversation or call (you and the other side), then get a summary with key points, decisions and action items. Saved as Markdown in Documents › Just Say It Notes.
 - **History and stats.** Words dictated, speaking speed, time saved. Stored only on your computer.
 
 ## Requirements
@@ -74,13 +75,14 @@ The installer builds the app on your Mac and puts it in `~/Applications`. If App
 | Rewrite selected text | **⌃⌥R**, or menu bar → Rewrite |
 | Drop the last sentence | Say **"scratch that"** |
 | Line breaks | Say **"new line"** / **"new paragraph"** |
+| Note Taker (record a conversation) | Press **Right ⇧ Shift three times**; again to stop |
 | Cancel | **Esc** |
 
 You can change the hotkey, language, tones, dictionary and snippets in the app window.
 
 ## Install on Windows
 
-**Easiest:** download **`JustSayIt-Setup-1.3.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. No admin rights needed.
+**Easiest:** download **`JustSayIt-Setup-1.4.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. No admin rights needed.
 
 **Or** open PowerShell and paste:
 
@@ -113,11 +115,14 @@ A **portable zip** is on the release page too, if you'd rather not install it.
 | Hands-free | Double-tap **Right Alt**; tap again to finish |
 | Scribe | Hold **Shift + Right Alt** |
 | Rewrite selected text | **Ctrl+Alt+R**, or tray menu → Rewrite |
+| Note Taker (record a conversation) | Press **Right Shift three times**; again to stop |
 | Cancel | **Esc** |
 
 You can change the hotkey (Right Alt, Right Ctrl, F8 or Scroll Lock), speech model, language and AI model in **Settings**.
 
 ## Privacy
+
+> **Recording conversations:** the Note Taker records you and, optionally, your computer's audio. Always tell people when you're recording them; laws differ by country and state.
 
 - **Mac:** speech by Apple's on-device `SpeechAnalyzer`; cleanup, Scribe and Rewrite by Apple's on-device Foundation Models; screen context read locally with Vision.
 - **Windows:** speech by Whisper running locally (whisper.cpp); screen context by Windows' built-in offline OCR; cleanup by a local Ollama model on `localhost`. The only network use is the one-time model download.
@@ -148,6 +153,9 @@ The Mac app is plain Swift / SwiftUI with no third-party dependencies:
 | `Sources/JustSayIt/Hotkeys.swift` | Hold, double-tap, Scribe and Esc hotkeys |
 | `Sources/JustSayIt/Overlay.swift` | Floating recording pill |
 | `Sources/JustSayIt/Store.swift` | Settings, dictionary, snippets, history |
+| `Sources/JustSayIt/NoteTaker.swift` | Note Taker: recording, transcript, summary, files |
+| `Sources/JustSayIt/NoteCapture.swift` | Long-form transcription and computer-audio capture |
+| `Sources/JustSayIt/NoteWindow.swift` | Live Note Taker window |
 
 ### Windows
 
@@ -175,6 +183,8 @@ The Windows app is C# / WinForms, using [Whisper.net](https://github.com/sandroh
 | `windows/JustSayIt/Overlay.cs` | Floating recording pill |
 | `windows/JustSayIt/ResultCard.cs` | Result card (Insert / Copy / Rewrite) |
 | `windows/JustSayIt/Store.cs` | Settings, dictionary, snippets, history |
+| `windows/JustSayIt/NoteTaker.cs` | Note Taker: mic + computer audio, chunked Whisper, summary, files |
+| `windows/JustSayIt/NoteWindow.cs` | Live Note Taker window |
 
 ## Tests
 
