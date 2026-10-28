@@ -141,6 +141,11 @@ struct Prefs: Codable {
     var useScreenContext = true
     var noteTakerEnabled = true
     var noteCaptureSystemAudio = true
+    var autoJoinEnabled = false
+    var autoJoinStartNotes = true
+    var autoJoinLeadSeconds = 60
+    var autoJoinStopGraceSeconds = 120
+    var autoJoinExcludedCalendars: [String] = []
 
     init() {}
 
@@ -165,6 +170,11 @@ struct Prefs: Codable {
         useScreenContext = (try? c.decode(Bool.self, forKey: .useScreenContext)) ?? def.useScreenContext
         noteTakerEnabled = (try? c.decode(Bool.self, forKey: .noteTakerEnabled)) ?? def.noteTakerEnabled
         noteCaptureSystemAudio = (try? c.decode(Bool.self, forKey: .noteCaptureSystemAudio)) ?? def.noteCaptureSystemAudio
+        autoJoinEnabled = (try? c.decode(Bool.self, forKey: .autoJoinEnabled)) ?? def.autoJoinEnabled
+        autoJoinStartNotes = (try? c.decode(Bool.self, forKey: .autoJoinStartNotes)) ?? def.autoJoinStartNotes
+        autoJoinLeadSeconds = (try? c.decode(Int.self, forKey: .autoJoinLeadSeconds)) ?? def.autoJoinLeadSeconds
+        autoJoinStopGraceSeconds = (try? c.decode(Int.self, forKey: .autoJoinStopGraceSeconds)) ?? def.autoJoinStopGraceSeconds
+        autoJoinExcludedCalendars = (try? c.decode([String].self, forKey: .autoJoinExcludedCalendars)) ?? []
     }
 }
 

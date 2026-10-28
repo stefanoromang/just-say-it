@@ -3,12 +3,13 @@ import Speech
 import SwiftUI
 
 enum Pane: String, CaseIterable, Identifiable {
-    case home = "Home", notes = "Note Taker", style = "Tone & Style", dictionary = "Dictionary", snippets = "Snippets", rewrite = "AI Rewrite", history = "History", settings = "Settings"
+    case home = "Home", meetings = "Meetings", notes = "Note Taker", style = "Tone & Style", dictionary = "Dictionary", snippets = "Snippets", rewrite = "AI Rewrite", history = "History", settings = "Settings"
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .home: "house"
         case .notes: "note.text"
+        case .meetings: "video"
         case .style: "theatermasks"
         case .dictionary: "character.book.closed"
         case .snippets: "text.badge.plus"
@@ -36,6 +37,7 @@ struct MainView: View {
                     switch ui.pane {
                     case .home: HomePane(c: c, store: store)
                     case .notes: NotesPane(store: store)
+                    case .meetings: MeetingsPane(store: store)
                     case .style: StylePane(store: store)
                     case .dictionary: DictionaryPane(store: store)
                     case .snippets: SnippetsPane(store: store)
@@ -486,5 +488,96 @@ struct NotesPane: View {
             }
         }
         .onAppear { n.refreshSaved() }
+    }
+}
+
+// MARK: Meetings (calendar auto-join)
+
+struct MeetingsPane: View {
+    @ObservedObject var store: Store
+    @ObservedObject var aj = AutoJoin.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Just Say It reads your Google and Microsoft calendars, joins your **Zoom, Google Meet and Microsoft Teams** calls on time, and takes notes automatically.")
+                .foregroundStyle(.secondary)
+
+            GroupBox("1. Connect your calendars") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: aj.hasAccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                            .foregroundStyle(aj.hasAccess ? .green : .orange)
+                        Text(aj.hasAccess ? "Calendar access granted" : "Allow Just Say It to read your calendars")
+                        Spacer()
+                        if !aj.hasAccess { Button("Allow access") { aj.requestAccess() } }
+                    }
+                    Text("Add your **Google** and **Microsoft (Outlook/Exchange/Office 365)** accounts in **System Settings › Internet Accounts** and turn on Calendars. They then appear below.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Open Internet Accounts") {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension")!)
+                    }
+                    if aj.hasAccess {
+                        Divider()
+                        Text("Calendars to watch").font(.caption.bold())
+                        ForEach(aj.calendars, id: \.calendarIdentifier) { c in
+                            Toggle(isOn: Binding(get: { aj.isCalendarIncluded(c) }, set: { aj.setCalendar(c, included: $0) })) {
+                                HStack(spacing: 6) {
+                                    Circle().fill(Color(cgColor: c.cgColor)).frame(width: 8, height: 8)
+                                    Text(c.title)
+                                    Text(c.source.title).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+
+            GroupBox("2. Automatic joining") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Join my calendar calls automatically", isOn: $store.prefs.autoJoinEnabled)
+                    Toggle("Start the Note Taker for each call (stops when the meeting ends)", isOn: $store.prefs.autoJoinStartNotes)
+                    Picker("Join", selection: $store.prefs.autoJoinLeadSeconds) {
+                        Text("At start time").tag(0)
+                        Text("1 minute early").tag(60)
+                        Text("2 minutes early").tag(120)
+                        Text("5 minutes early").tag(300)
+                    }
+                    .frame(maxWidth: 320)
+                    Text("Zoom opens directly in the Zoom app. Google Meet and Teams open their join screen in your browser or Teams app; the first time, sign in and choose “remember” so later calls connect straight away. Only calls you haven't declined are joined.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if !aj.lastAction.isEmpty { Text(aj.lastAction).font(.caption).foregroundStyle(.purple) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+
+            HStack {
+                Text("Upcoming calls").font(.headline)
+                Spacer()
+                Button("Refresh") { aj.refresh() }
+            }
+            if aj.upcoming.isEmpty {
+                Text(aj.hasAccess ? "No Zoom, Meet or Teams calls in the next 36 hours." : "Connect your calendars to see your calls.")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(aj.upcoming) { m in
+                HStack(alignment: .top) {
+                    Image(systemName: m.link.platform == .zoom ? "video.fill" : (m.link.platform == .meet ? "person.2.wave.2.fill" : "person.3.fill"))
+                        .foregroundStyle(.purple).frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(m.title).bold()
+                        Text("\(m.start.formatted(date: .abbreviated, time: .shortened)) – \(m.end.formatted(date: .omitted, time: .shortened)) · \(m.link.platform.rawValue)")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text(m.calendar).font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                    if aj.current?.id == m.id {
+                        Text("In call").font(.caption.bold()).foregroundStyle(.red)
+                    }
+                    Button("Join now") { aj.join(m, automatic: false) }
+                }
+            }
+        }
+        .onAppear { aj.refresh() }
     }
 }

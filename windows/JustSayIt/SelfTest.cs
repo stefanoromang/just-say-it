@@ -65,6 +65,7 @@ public static class SelfTest
 
         // 3. Context + insertion against a real text box in a separate UI thread
         //    (in real use the target app is another process, never our own thread).
+        ContextReader.WarmUp();
         var target = Target.Start();
         Log("target window ready");
         await Pump(500);
@@ -154,6 +155,22 @@ public static class SelfTest
             bool ok = text.Contains("march") && text.Contains("press release") && text.Contains("friday");
             return (ok, $"\"{text}\"");
         }, 240);
+
+        await Step("Meetings: reads calendar and finds Zoom/Meet/Teams", () =>
+        {
+            var now = DateTime.Now;
+            string Ev(string uid, string title, DateTime s, string body) =>
+                $"BEGIN:VEVENT\r\nUID:{uid}\r\nSUMMARY:{title}\r\nDTSTART:{s.ToUniversalTime():yyyyMMdd'T'HHmmss'Z'}\r\nDTEND:{s.AddHours(1).ToUniversalTime():yyyyMMdd'T'HHmmss'Z'}\r\nDESCRIPTION:{body}\r\nEND:VEVENT\r\n";
+            var ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//JustSayIt//SelfTest//EN\r\n"
+                + Ev("a", "Zoom call", now.AddHours(1), "Join https://zoom.us/j/123?pwd=x")
+                + Ev("b", "Meet call", now.AddHours(2), "https://meet.google.com/abc-defg-hij")
+                + Ev("c", "Teams call", now.AddHours(3), "https://teams.microsoft.com/l/meetup-join/19%3ameeting_X%40thread.v2/0")
+                + Ev("d", "Lunch", now.AddHours(4), "no link")
+                + "END:VCALENDAR\r\n";
+            var found = AutoJoin.Parse(ics, "Test", now);
+            var names = string.Join(", ", found.Select(m => $"{m.Title}={MeetingLinks.Name(m.Link.Platform)}"));
+            return Task.FromResult((found.Count == 3 && found.All(m => m.Title != "Lunch"), names));
+        });
 
         await Step("Overlay and result card render", async () =>
         {

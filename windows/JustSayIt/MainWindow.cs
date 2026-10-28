@@ -28,6 +28,7 @@ public sealed class MainWindow : Form
         BackColor = Color.White;
 
         tabs.TabPages.Add(HomeTab());
+        tabs.TabPages.Add(MeetingsTab());
         tabs.TabPages.Add(NotesTab());
         tabs.TabPages.Add(StyleTab());
         tabs.TabPages.Add(DictionaryTab());
@@ -122,6 +123,89 @@ public sealed class MainWindow : Form
         int wpm = p.TotalSeconds > 5 ? (int)(p.TotalWords / (p.TotalSeconds / 60)) : 0;
         if (statsLabel != null) statsLabel.Text = $"{p.TotalWords} words dictated   ·   {(wpm > 0 ? wpm.ToString() : "–")} words/min   ·   {p.TotalWords / 40} min saved vs typing";
         if (lastLabel != null) lastLabel.Text = string.IsNullOrEmpty(c.LastResult) ? "" : $"Last dictation ({c.LastContext}):\n{c.LastResult}";
+    }
+
+    // MARK: Meetings (calendar auto-join)
+
+    TabPage MeetingsTab()
+    {
+        var page = new TabPage("Meetings");
+        var f = Flow();
+        var p = store.Prefs;
+        f.Controls.Add(L("Just Say It reads your Google and Microsoft calendars, joins your Zoom, Google Meet and Microsoft Teams calls on time, and takes notes automatically.", null, Color.DimGray));
+
+        var connect = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+        connect.Controls.Add(L("Paste each calendar's private iCal (ICS) link:", null, null, 760));
+        connect.Controls.Add(L("• Google Calendar: calendar.google.com › Settings › your calendar › Integrate calendar › “Secret address in iCal format”.\n• Outlook / Microsoft 365: outlook.com or outlook.office.com › Settings › Calendar › Shared calendars › Publish a calendar › “Can view all details” › copy the ICS link.", Small, Color.DimGray, 760));
+        var row = new FlowLayoutPanel { AutoSize = true };
+        var name = new TextBox { Width = 160, PlaceholderText = "Name (e.g. Work Google)" };
+        var url = new TextBox { Width = 460, PlaceholderText = "https://… .ics" };
+        var add = new Button { Text = "Add", AutoSize = true };
+        row.Controls.AddRange(new Control[] { name, url, add });
+        var feeds = new ListBox { Width = 760, Height = 80 };
+        var remove = new Button { Text = "Remove selected", AutoSize = true };
+        void ReloadFeeds() { feeds.Items.Clear(); foreach (var fd in p.CalendarFeeds) feeds.Items.Add($"{fd.Name}  —  {(fd.Url.Length > 60 ? fd.Url[..60] + "…" : fd.Url)}"); }
+        ReloadFeeds();
+        add.Click += async (_, _) =>
+        {
+            if (!url.Text.Trim().StartsWith("http", StringComparison.OrdinalIgnoreCase) && !url.Text.Trim().StartsWith("webcal", StringComparison.OrdinalIgnoreCase)) return;
+            p.CalendarFeeds.Add(new CalendarFeed { Name = name.Text.Trim().Length > 0 ? name.Text.Trim() : "Calendar", Url = url.Text.Trim() });
+            store.Save(); name.Clear(); url.Clear(); ReloadFeeds();
+            await AutoJoin.Shared.Refresh();
+        };
+        remove.Click += async (_, _) => { if (feeds.SelectedIndex >= 0) { p.CalendarFeeds.RemoveAt(feeds.SelectedIndex); store.Save(); ReloadFeeds(); await AutoJoin.Shared.Refresh(); } };
+        connect.Controls.AddRange(new Control[] { row, feeds, remove });
+        f.Controls.Add(Group("1. Connect your calendars", connect));
+
+        var auto = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+        CheckBox Check(string text, bool value, Action<bool> set)
+        {
+            var cb = new CheckBox { Text = text, Checked = value, AutoSize = true };
+            cb.CheckedChanged += (_, _) => { set(cb.Checked); store.Save(); };
+            return cb;
+        }
+        auto.Controls.Add(Check("Join my calendar calls automatically", p.AutoJoinEnabled, v => p.AutoJoinEnabled = v));
+        auto.Controls.Add(Check("Start the Note Taker for each call (stops when the meeting ends)", p.AutoJoinStartNotes, v => p.AutoJoinStartNotes = v));
+        var lead = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+        var leads = new[] { (0, "At start time"), (60, "1 minute early"), (120, "2 minutes early"), (300, "5 minutes early") };
+        foreach (var l in leads) lead.Items.Add(l.Item2);
+        lead.SelectedIndex = Math.Max(0, Array.FindIndex(leads, l => l.Item1 == p.AutoJoinLeadSeconds));
+        lead.SelectedIndexChanged += (_, _) => { p.AutoJoinLeadSeconds = leads[lead.SelectedIndex].Item1; store.Save(); };
+        auto.Controls.Add(lead);
+        auto.Controls.Add(L("Zoom opens directly in the Zoom app. Google Meet and Teams open their join screen; the first time, sign in and choose “remember” so later calls connect straight away.", Small, Color.DimGray, 760));
+        f.Controls.Add(Group("2. Automatic joining", auto));
+
+        var status = L("", Small, Color.FromArgb(110, 70, 220));
+        f.Controls.Add(status);
+        var head = new FlowLayoutPanel { AutoSize = true };
+        head.Controls.Add(L("Upcoming calls", H2));
+        var refreshBtn = new Button { Text = "Refresh", AutoSize = true };
+        refreshBtn.Click += async (_, _) => await AutoJoin.Shared.Refresh();
+        head.Controls.Add(refreshBtn);
+        f.Controls.Add(head);
+        var list = new ListView { View = View.Details, FullRowSelect = true, Width = 800, Height = 200 };
+        list.Columns.Add("When", 170); list.Columns.Add("Meeting", 340); list.Columns.Add("App", 130); list.Columns.Add("Calendar", 140);
+        var join = new Button { Text = "Join selected now", AutoSize = true };
+        join.Click += (_, _) => { if (list.SelectedItems.Count > 0 && list.SelectedItems[0].Tag is UpcomingMeeting m) AutoJoin.Shared.Join(m); };
+        f.Controls.Add(list);
+        f.Controls.Add(join);
+
+        void Render()
+        {
+            list.Items.Clear();
+            foreach (var m in AutoJoin.Shared.Upcoming)
+                list.Items.Add(new ListViewItem(new[] { $"{m.Start:ddd t} – {m.End:t}", m.Title, MeetingLinks.Name(m.Link.Platform), m.Calendar }) { Tag = m });
+            var a = AutoJoin.Shared;
+            status.Text = a.LastError.Length > 0 ? "⚠️ " + a.LastError : a.LastAction;
+            if (a.Upcoming.Count == 0 && p.CalendarFeeds.Count > 0 && a.LastError.Length == 0) status.Text = "No Zoom, Meet or Teams calls in the next 36 hours.";
+        }
+        void OnChanged() => Ui.Run(() => { if (!IsDisposed) Render(); });
+        AutoJoin.Shared.Changed += OnChanged;
+        FormClosed += (_, _) => AutoJoin.Shared.Changed -= OnChanged;
+        page.Enter += (_, _) => Render();
+        Render();
+        page.Controls.Add(f);
+        return page;
     }
 
     // MARK: Note Taker
@@ -389,7 +473,7 @@ public sealed class MainWindow : Form
         f.Controls.Add(grid);
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 1.4 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 1.5 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

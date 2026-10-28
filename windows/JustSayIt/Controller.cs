@@ -49,6 +49,8 @@ public sealed class Controller : IDisposable
 
         _ = PrepareModel();
         _ = TextBrain.Prewarm();
+        AutoJoin.Shared.Boot();
+        ContextReader.WarmUp();
     }
 
     public async Task PrepareModel()

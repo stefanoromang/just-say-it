@@ -22,14 +22,15 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>JustSayIt</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.4</string>
-  <key>CFBundleVersion</key><string>5</string>
+  <key>CFBundleShortVersionString</key><string>1.5</string>
+  <key>CFBundleVersion</key><string>6</string>
   <key>NSHumanReadableCopyright</key><string>© 2026 Stefano Roman Gunness. MIT License.</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSMicrophoneUsageDescription</key><string>Just Say It listens to your voice to type for you. Audio never leaves your Mac.</string>
   <key>NSSpeechRecognitionUsageDescription</key><string>Just Say It turns your speech into text on-device.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>Just Say It reads your calendar to join your Zoom, Google Meet and Teams calls and take notes.</string>
   <key>NSAppleEventsUsageDescription</key><string>Just Say It types text into the app you are using.</string>
 </dict>
 </plist>
@@ -50,6 +51,7 @@ cat > build/entitlements.plist <<'ENT'
 <plist version="1.0"><dict>
   <key>com.apple.security.automation.apple-events</key><true/>
   <key>com.apple.security.device.audio-input</key><true/>
+  <key>com.apple.security.personal-information.calendars</key><true/>
 </dict></plist>
 ENT
 codesign --force --options runtime --entitlements build/entitlements.plist \

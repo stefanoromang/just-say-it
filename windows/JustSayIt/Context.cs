@@ -80,18 +80,29 @@ public static class ContextReader
 
         // UI Automation can be slow on some apps; read into a copy on a background
         // thread and cap the wait so the hotkey always feels instant.
+        // Classic Windows text boxes answer directly in a few milliseconds, so read them first:
+        // this still works when UI Automation is slow (for example on its first use).
+        var hwndFocus = FocusedControl(c.Window);
+        if (hwndFocus != IntPtr.Zero) ReadNativeEdit(hwndFocus, c);
+
         var probe = new CaptureContext { Window = c.Window, ProcessName = c.ProcessName };
         var task = Task.Run(() => ReadAutomation(probe));
-        if (task.Wait(TimeSpan.FromMilliseconds(450)))
+        if (task.Wait(TimeSpan.FromMilliseconds(600)))
         {
-            c.SelectedText = probe.SelectedText;
-            c.TextBeforeCursor = probe.TextBeforeCursor;
-            c.FieldIsEditable = probe.FieldIsEditable;
+            c.SelectedText ??= probe.SelectedText;
+            if (string.IsNullOrEmpty(c.TextBeforeCursor)) c.TextBeforeCursor = probe.TextBeforeCursor;
+            c.FieldIsEditable ??= probe.FieldIsEditable;
             c.Url = probe.Url;
         }
         c.Category = Classify(c);
         return c;
     }
+
+    /// UI Automation is slow the first time it is used; call this once at startup.
+    public static void WarmUp() => Task.Run(() =>
+    {
+        try { _ = AutomationElement.FocusedElement?.Current.ControlType; } catch { }
+    });
 
     static string FriendlyName(Process p)
     {
@@ -169,9 +180,6 @@ public static class ContextReader
             }
         }
         catch { }
-
-        // Classic Win32 / WinForms edit controls: read text and selection directly.
-        if (hwndFocus != IntPtr.Zero) ReadNativeEdit(hwndFocus, c);
 
         try { if (IsBrowser(c.ProcessName)) c.Url = BrowserUrl(c.Window); } catch { }
     }

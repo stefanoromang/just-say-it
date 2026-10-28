@@ -1,0 +1,1 @@
+../../Sources/JustSayIt/MeetingLinks.swift

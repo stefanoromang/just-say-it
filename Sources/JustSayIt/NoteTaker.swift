@@ -47,6 +47,7 @@ final class NoteTaker: ObservableObject {
     private var sysCapture: SystemAudioCapture?
     private var fileURL: URL?
     private var context = ""
+    private(set) var meeting: UpcomingMeeting?
 
     private init() { refreshSaved() }
 
@@ -56,15 +57,24 @@ final class NoteTaker: ObservableObject {
 
     // MARK: Start / stop
 
-    func start() async {
+    /// Starts notes for a calendar meeting (title and attendees go into the note).
+    func start(meeting m: UpcomingMeeting) async {
+        meeting = m
+        await start(keepMeeting: true)
+    }
+
+    func start() async { await start(keepMeeting: false) }
+
+    private func start(keepMeeting: Bool) async {
         guard !isRecording else { return }
+        if !keepMeeting { meeting = nil }
         let store = Store.shared
         let locale = Locale(identifier: store.prefs.localeID)
         lines = []
         live = [:]
         status = "Starting…"
         let front = Inserter.frontApp()
-        context = front.name
+        context = meeting.map { "\($0.link.platform.rawValue) – \($0.title)" } ?? front.name
 
         do {
             try await TranscriptPipe.ensureModel(locale: locale)
@@ -166,6 +176,7 @@ final class NoteTaker: ObservableObject {
     private func summarize() async -> String? {
         guard TextBrain.aiAvailable else { return nil }
         var transcript = transcriptText(timestamps: false)
+        if let m = meeting { transcript = "Meeting: \(m.title)\nAttendees: \(m.attendees.joined(separator: ", "))\n\n" + transcript }
         if transcript.count > 9000 { transcript = String(transcript.prefix(4500)) + "\n…\n" + String(transcript.suffix(4500)) }
         let ins = """
         You write meeting notes from a transcript. Lines starting with "Me:" are the user; "Others:" is everyone else.
@@ -190,7 +201,12 @@ final class NoteTaker: ObservableObject {
     private func createFile() {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH.mm"
-        let name = "Note \(f.string(from: Date())).md"
+        var title = "Note"
+        if let m = meeting {
+            let safe = m.title.components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|")).joined(separator: "-")
+            title = String(safe.prefix(60)).trimmingCharacters(in: .whitespaces)
+        }
+        let name = "\(f.string(from: Date())) \(title).md"
         fileURL = Self.notesDir.appendingPathComponent(name)
         writeFile(summary: nil)
     }
@@ -213,8 +229,9 @@ final class NoteTaker: ObservableObject {
         df.timeStyle = .short
         let start = startedAt ?? Date()
         let duration = Date().timeIntervalSince(start)
-        var md = "# Note – \(df.string(from: start))\n\n"
-        md += "*Recorded with Just Say It · \(stamp(duration)) · started in \(context)*\n\n"
+        var md = meeting.map { "# \($0.title)\n\n" } ?? "# Note – \(df.string(from: start))\n\n"
+        md += "*Recorded with Just Say It · \(df.string(from: start)) · \(stamp(duration)) · \(context)*\n\n"
+        if let m = meeting, !m.attendees.isEmpty { md += "**Attendees:** " + m.attendees.joined(separator: ", ") + "\n\n" }
         if let summary { md += summary.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n" }
         md += "## Transcript\n\n" + transcriptText() + "\n"
         try? md.write(to: url, atomically: true, encoding: .utf8)

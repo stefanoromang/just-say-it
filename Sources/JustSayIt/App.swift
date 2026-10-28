@@ -41,6 +41,9 @@ struct MenuContent: View {
         Button("Start / Stop Dictation") { c.toggleFromMenu() }
         Button(NoteTaker.shared.isRecording ? "Stop Note Taker" : "Start Note Taker (Right ⇧ ×3)") { c.toggleNotes() }
         Button("Show Note Taker") { NoteWindow.shared.show() }
+        if let next = AutoJoin.shared.upcoming.first(where: { $0.end > Date() }) {
+            Button("Join now: \(next.title) (\(next.start.formatted(date: .omitted, time: .shortened)))") { AutoJoin.shared.join(next, automatic: false) }
+        }
         Menu("Rewrite Selected Text") {
             ForEach(RewriteStyle.allCases) { s in
                 Button(s.label) { c.rewriteSelection(s) }

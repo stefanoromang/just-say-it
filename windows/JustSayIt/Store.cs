@@ -92,6 +92,8 @@ public static class Labels
     };
 }
 
+public class CalendarFeed { public string Name { get; set; } = ""; public string Url { get; set; } = ""; }
+
 public class Replacement { public string Heard { get; set; } = ""; public string Write { get; set; } = ""; }
 
 public class Snippet { public string Trigger { get; set; } = ""; public string Text { get; set; } = ""; }
@@ -122,6 +124,11 @@ public class Prefs
     public bool UseScreenContext { get; set; } = true;
     public bool NoteTakerEnabled { get; set; } = true;
     public bool NoteCaptureSystemAudio { get; set; } = true;
+    public bool AutoJoinEnabled { get; set; } = false;
+    public bool AutoJoinStartNotes { get; set; } = true;
+    public int AutoJoinLeadSeconds { get; set; } = 60;
+    public int AutoJoinStopGraceSeconds { get; set; } = 120;
+    public List<CalendarFeed> CalendarFeeds { get; set; } = new();
     public Dictionary<AppCategory, Tone> Tones { get; set; } = new()
     {
         [AppCategory.Email] = Tone.Professional, [AppCategory.Work] = Tone.Professional,

@@ -50,6 +50,7 @@ public sealed class NoteTaker
     Task? worker;
     string? filePath;
     string context = "";
+    UpcomingMeeting? meeting;
     readonly object linesGate = new();
 
     const int Rate = 16000;
@@ -60,9 +61,12 @@ public sealed class NoteTaker
         if (IsRecording) _ = Stop(); else _ = Start();
     }
 
-    public async Task Start()
+    public Task Start() => Start(null);
+
+    public async Task Start(UpcomingMeeting? m)
     {
         if (IsRecording) return;
+        meeting = m;
         var p = Store.Shared.Prefs;
         Lines.Clear();
         Set("Starting…");
@@ -73,7 +77,7 @@ public sealed class NoteTaker
         }
         catch (Exception e) { Set("Couldn't load the speech model: " + e.Message); return; }
 
-        context = ContextReader.Capture().AppName;
+        context = meeting != null ? $"{MeetingLinks.Name(meeting.Link.Platform)} – {meeting.Title}" : ContextReader.Capture().AppName;
         sources.Clear();
         try
         {
@@ -96,7 +100,9 @@ public sealed class NoteTaker
         StartedAt = DateTime.Now;
         IsRecording = true;
         Set(sources.Count > 1 ? "Recording you and computer audio" : "Recording your microphone");
-        var name = $"Note {DateTime.Now:yyyy-MM-dd HH.mm}.md";
+        var title = meeting == null ? "Note" : string.Join("-", meeting.Title.Split(Path.GetInvalidFileNameChars())).Trim();
+        if (title.Length > 60) title = title[..60];
+        var name = $"{DateTime.Now:yyyy-MM-dd HH.mm} {title}.md";
         filePath = Path.Combine(NotesDir, name);
         WriteFile(null);
         cts = new CancellationTokenSource();
@@ -246,8 +252,9 @@ public sealed class NoteTaker
     {
         if (filePath == null) return;
         var md = new StringBuilder();
-        md.AppendLine($"# Note – {StartedAt:dddd, MMMM d, yyyy h:mm tt}\n");
-        md.AppendLine($"*Recorded with Just Say It · {Stamp((DateTime.Now - StartedAt).TotalSeconds)} · started in {context}*\n");
+        md.AppendLine(meeting != null ? $"# {meeting.Title}\n" : $"# Note – {StartedAt:dddd, MMMM d, yyyy h:mm tt}\n");
+        md.AppendLine($"*Recorded with Just Say It · {StartedAt:f} · {Stamp((DateTime.Now - StartedAt).TotalSeconds)} · {context}*\n");
+        if (meeting != null && meeting.Attendees.Count > 0) md.AppendLine("**Attendees:** " + string.Join(", ", meeting.Attendees) + "\n");
         if (!string.IsNullOrWhiteSpace(summary)) md.AppendLine(summary.Trim() + "\n");
         md.AppendLine("## Transcript\n");
         md.AppendLine(TranscriptText());
@@ -257,6 +264,7 @@ public sealed class NoteTaker
     async Task<string?> Summarize()
     {
         var transcript = TranscriptText(false);
+        if (meeting != null) transcript = $"Meeting: {meeting.Title}\nAttendees: {string.Join(", ", meeting.Attendees)}\n\n" + transcript;
         if (transcript.Length > 9000) transcript = transcript[..4500] + "\n…\n" + transcript[^4500..];
         return await TextBrain.SummarizeMeeting(transcript);
     }

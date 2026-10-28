@@ -2,6 +2,22 @@
 
 All notable changes to **Just Say It** (created by Stefano Roman Gunness).
 
+## 1.5 – 2026-10-28
+
+### New: Meetings – auto-join your calls (Mac and Windows)
+- Reads your **Google** and **Microsoft** calendars and finds **Zoom, Google Meet and Microsoft Teams** calls.
+  - **Mac:** through the accounts in System Settings › Internet Accounts (choose which calendars to watch).
+  - **Windows:** through each calendar's private iCal (ICS) link, including recurring meetings.
+- **Joins automatically** at start time or 1/2/5 minutes early. Zoom opens straight in the Zoom app; Meet and Teams open their join screen.
+- **Takes notes automatically** for each call with the Note Taker, named after the meeting and including the attendees, and stops when the meeting ends.
+- Skips declined (Mac) and cancelled meetings. **Join now** button in the Meetings tab and the menu bar / tray.
+
+### Windows fixes
+- Reading the text box no longer fails when Windows is slow on first use.
+
+### Testing
+- New tests for meeting-link detection (Mac 30 checks, Windows 33) and calendar reading with recurring meetings; the Windows self-test reads a sample calendar.
+
 ## 1.4 – 2026-10-28
 
 ### New: Note Taker (Mac and Windows)

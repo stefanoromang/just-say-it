@@ -58,6 +58,14 @@ var passed = 0
     check("fit keeps I", TextBrain.fitToCursor("I agree.", before: "Well"), " I agree.")
     check("fit empty", TextBrain.fitToCursor("Hello.", before: nil), "Hello.")
 
+    // Meeting links
+    check("zoom link", MeetingLinks.find(in: ["Join: https://us06web.zoom.us/j/81234567890?pwd=AbC1.1 ID 812"])?.platform == .zoom)
+    check("meet link", MeetingLinks.find(in: ["https://meet.google.com/abc-defg-hij"])?.platform == .meet)
+    check("teams link", MeetingLinks.find(in: ["<https://teams.microsoft.com/l/meetup-join/19%3ameeting_X%40thread.v2/0?context=%7b%7d>"])?.platform == .teams)
+    check("no link", MeetingLinks.find(in: ["Lunch at noon", "https://docs.google.com/x"]) == nil)
+    check("zoom app url", MeetingLinks.appURL(for: MeetingLinks.find(in: ["https://zoom.us/j/123?pwd=x"])!).absoluteString,
+          "zoommtg://zoom.us/join?action=join&confno=123&pwd=x")
+
     print(failures == 0 ? "✓ All \(passed) Mac rule tests passed" : "\(failures) failed, \(passed) passed")
     exit(failures == 0 ? 0 : 1)
 }

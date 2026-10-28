@@ -32,6 +32,7 @@ Everything runs **on your computer**. There's no account, no subscription, no wo
 - **Hotkeys.** Hold to talk, double-tap for hands-free, Shift for Scribe, Esc to cancel.
 - **Many languages**, all processed on-device (40+ on Mac, ~100 with auto-detect on Windows).
 - **Note Taker.** Press **Right Shift three times** to record and transcribe a conversation or call (you and the other side), then get a summary with key points, decisions and action items. Saved as Markdown in Documents › Just Say It Notes.
+- **Auto-join meetings.** Connects to your **Google and Microsoft calendars**, joins your **Zoom, Google Meet and Teams** calls on time, and takes notes for each one automatically.
 - **History and stats.** Words dictated, speaking speed, time saved. Stored only on your computer.
 
 ## Requirements
@@ -80,9 +81,28 @@ The installer builds the app on your Mac and puts it in `~/Applications`. If App
 
 You can change the hotkey, language, tones, dictionary and snippets in the app window.
 
+## Meetings: auto-join and take notes
+
+Just Say It joins your calls **from your own computer**, using your own Zoom, Meet or Teams account. It doesn't send a bot. When a call starts:
+
+1. It opens the meeting (Zoom straight in the Zoom app; Meet and Teams on their join screen).
+2. It starts the Note Taker, records you and the other people, and stops when the meeting ends.
+3. It saves a note named after the meeting, with the attendees, a summary, decisions and action items.
+
+**Connect your calendars**
+
+- **Mac:** add your Google and Microsoft (Outlook / Office 365 / Exchange) accounts in **System Settings › Internet Accounts** with Calendars turned on. Then open **Just Say It › Meetings**, click **Allow access**, and pick the calendars to watch.
+- **Windows:** in **Just Say It › Meetings**, paste each calendar's private iCal link:
+  - **Google Calendar:** Settings › *your calendar* › Integrate calendar › **Secret address in iCal format**
+  - **Outlook / Microsoft 365:** Settings › Calendar › Shared calendars › **Publish a calendar** (Can view all details) › copy the **ICS** link
+
+Then turn on **Join my calendar calls automatically**. The first time you join a Meet or Teams call, sign in and choose "remember me" so later calls connect straight away.
+
+> Always tell the people in your meetings that you're taking notes.
+
 ## Install on Windows
 
-**Easiest:** download **`JustSayIt-Setup-1.4.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. No admin rights needed.
+**Easiest:** download **`JustSayIt-Setup-1.5.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. No admin rights needed.
 
 **Or** open PowerShell and paste:
 
@@ -156,6 +176,8 @@ The Mac app is plain Swift / SwiftUI with no third-party dependencies:
 | `Sources/JustSayIt/NoteTaker.swift` | Note Taker: recording, transcript, summary, files |
 | `Sources/JustSayIt/NoteCapture.swift` | Long-form transcription and computer-audio capture |
 | `Sources/JustSayIt/NoteWindow.swift` | Live Note Taker window |
+| `Sources/JustSayIt/AutoJoin.swift` | Calendar watching, auto-join and automatic notes |
+| `Sources/JustSayIt/MeetingLinks.swift` | Finds Zoom / Meet / Teams links in calendar events |
 
 ### Windows
 
@@ -185,6 +207,8 @@ The Windows app is C# / WinForms, using [Whisper.net](https://github.com/sandroh
 | `windows/JustSayIt/Store.cs` | Settings, dictionary, snippets, history |
 | `windows/JustSayIt/NoteTaker.cs` | Note Taker: mic + computer audio, chunked Whisper, summary, files |
 | `windows/JustSayIt/NoteWindow.cs` | Live Note Taker window |
+| `windows/JustSayIt/AutoJoin.cs` | Calendar (ICS) reading, auto-join and automatic notes |
+| `windows/JustSayIt/MeetingLinks.cs` | Finds Zoom / Meet / Teams links in calendar events |
 
 ## Tests
 

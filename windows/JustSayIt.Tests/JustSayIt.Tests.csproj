@@ -12,9 +12,11 @@
   <ItemGroup>
     <Compile Include="../JustSayIt/TextBrain.cs" Link="TextBrain.cs" />
     <Compile Include="../JustSayIt/Store.cs" Link="Store.cs" />
+    <Compile Include="../JustSayIt/MeetingLinks.cs" Link="MeetingLinks.cs" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Ical.Net" Version="5.2.3" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
