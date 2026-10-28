@@ -49,6 +49,7 @@ final class Controller: ObservableObject {
         refreshPermissions()
         TextBrain.prewarm()
         AutoJoin.shared.boot()
+        Updater.shared.boot()
         Task { await prepareModel() }
         // Re-check permissions periodically so the hotkey starts working as soon as they're granted.
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in

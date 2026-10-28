@@ -59,6 +59,11 @@ struct MenuContent: View {
         }
         .keyboardShortcut(",")
         Divider()
+        if Updater.shared.updateAvailable, let v = Updater.shared.latest {
+            Button("⬆︎ Install update \(v)") { Updater.shared.install() }
+        } else {
+            Button("Check for Updates…") { Task { await Updater.shared.check(userInitiated: true) } }
+        }
         Button("About Just Say It") {
             NSApp.activate(ignoringOtherApps: true)
             NSApp.orderFrontStandardAboutPanel(options: [

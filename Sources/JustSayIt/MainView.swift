@@ -420,6 +420,7 @@ struct SettingsPane: View {
             Toggle("Play start/stop sounds", isOn: $store.prefs.playSounds)
             Toggle("Restore my clipboard after inserting", isOn: $store.prefs.restoreClipboard)
             Text(c.modelStatus).font(.caption).foregroundStyle(.secondary)
+            UpdatesSection(store: store)
         }
         .formStyle(.grouped)
         .task {
@@ -579,5 +580,29 @@ struct MeetingsPane: View {
             }
         }
         .onAppear { aj.refresh() }
+    }
+}
+
+// MARK: Updates
+
+struct UpdatesSection: View {
+    @ObservedObject var store: Store
+    @ObservedObject var u = Updater.shared
+
+    var body: some View {
+        Section("Updates") {
+            Toggle("Check for updates automatically", isOn: $store.prefs.checkForUpdates)
+            HStack {
+                Text("Version \(u.current)")
+                Spacer()
+                if u.installing { ProgressView().controlSize(.small) }
+                if u.updateAvailable, let v = u.latest {
+                    Button("Install \(v)") { u.install() }.buttonStyle(.borderedProminent).tint(.purple).disabled(u.installing)
+                } else {
+                    Button("Check now") { Task { await u.check(userInitiated: true) } }.disabled(u.installing)
+                }
+            }
+            if !u.status.isEmpty { Text(u.status).font(.caption).foregroundStyle(.secondary) }
+        }
     }
 }

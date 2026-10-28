@@ -471,9 +471,34 @@ public sealed class MainWindow : Form
         Row("", Check("Restore my clipboard after inserting", p.RestoreClipboard, v => p.RestoreClipboard = v));
         Row("", Check("Start Just Say It with Windows", p.StartWithWindows, v => { p.StartWithWindows = v; Program.SetStartWithWindows(v); }));
         f.Controls.Add(grid);
+
+        var upd = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+        var auto = new CheckBox { Text = "Check for updates automatically", Checked = p.CheckForUpdates, AutoSize = true };
+        auto.CheckedChanged += (_, _) => { p.CheckForUpdates = auto.Checked; store.Save(); };
+        var updStatus = L("", Small, Color.DimGray);
+        var updBtn = new Button { AutoSize = true };
+        void RenderUpd()
+        {
+            var u = Updater.Shared;
+            updStatus.Text = $"Version {Updater.Current}" + (u.Status.Length > 0 ? " · " + u.Status : "");
+            updBtn.Text = u.UpdateAvailable ? $"Install {u.Latest}" : "Check now";
+            updBtn.Enabled = !u.Installing;
+        }
+        updBtn.Click += async (_, _) =>
+        {
+            if (Updater.Shared.UpdateAvailable) await Updater.Shared.Install();
+            else await Updater.Shared.Check(true);
+        };
+        void OnUpd() => Ui.Run(() => { if (!IsDisposed) RenderUpd(); });
+        Updater.Shared.Changed += OnUpd;
+        FormClosed += (_, _) => Updater.Shared.Changed -= OnUpd;
+        RenderUpd();
+        upd.Controls.AddRange(new Control[] { auto, updStatus, updBtn });
+        f.Controls.Add(Group("Updates", upd));
+
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 1.5 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 1.6 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

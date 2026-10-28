@@ -66,6 +66,12 @@ var passed = 0
     check("zoom app url", MeetingLinks.appURL(for: MeetingLinks.find(in: ["https://zoom.us/j/123?pwd=x"])!).absoluteString,
           "zoommtg://zoom.us/join?action=join&confno=123&pwd=x")
 
+    // Update version comparison
+    check("1.6 > 1.5", Updater.isNewer("1.6", than: "1.5"))
+    check("1.10 > 1.9", Updater.isNewer("v1.10", than: "1.9"))
+    check("1.5 == 1.5.0", !Updater.isNewer("1.5.0", than: "1.5"))
+    check("1.4 < 1.5", !Updater.isNewer("1.4", than: "1.5"))
+
     print(failures == 0 ? "✓ All \(passed) Mac rule tests passed" : "\(failures) failed, \(passed) passed")
     exit(failures == 0 ? 0 : 1)
 }

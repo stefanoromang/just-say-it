@@ -58,6 +58,90 @@ jobs:
           name: windows-selftest-report
           path: selftest-report.txt
 
+  windows-standard-user:
+    name: Install + run without admin (standard Windows user)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - name: Build app and installer
+        shell: pwsh
+        run: |
+          dotnet publish windows/JustSayIt/JustSayIt.csproj -c Release -r win-x64 --self-contained true -o windows/dist/JustSayIt
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows\installer\JustSayIt.iss
+          Compress-Archive -Path windows/dist/JustSayIt/* -DestinationPath windows/dist/portable.zip
+      - name: Check the app asks for no admin rights
+        shell: pwsh
+        run: |
+          $sdk = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter mt.exe | Where-Object FullName -like "*x64*" | Select-Object -First 1
+          & $sdk.FullName -nologo -inputresource:"windows\dist\JustSayIt\JustSayIt.exe;#1" -out:manifest.xml
+          Get-Content manifest.xml
+          if (-not (Select-String -Path manifest.xml -Pattern 'level="asInvoker"' -Quiet)) { throw "App manifest does not request asInvoker" }
+      - name: Install and run as a standard user (no admin)
+        shell: pwsh
+        run: |
+          $user = "jsitest"; $pw = "Jsi-" + [guid]::NewGuid().ToString("N").Substring(0, 12) + "!a1"
+          net user $user $pw /add | Out-Null
+          # Not added to Administrators: a normal user account.
+          if ((net localgroup Administrators) -match "^$user$") { throw "test user is an admin" }
+          $cred = New-Object PSCredential(".\$user", (ConvertTo-SecureString $pw -AsPlainText -Force))
+          $work = "C:\jsitest"; New-Item -ItemType Directory $work -Force | Out-Null
+          Copy-Item (Get-Item windows\dist\JustSayIt-Setup-*.exe).FullName "$work\setup.exe"
+          Copy-Item windows\dist\portable.zip "$work\portable.zip"
+          icacls $work /grant "${user}:(OI)(CI)F" | Out-Null
+
+          $script = @'
+          $ErrorActionPreference = "Stop"
+          $log = "C:\jsitest\result.txt"
+          function Say($m) { Add-Content $log $m }
+          $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+          $admin = (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+          Say "user=$($id.Name) admin=$admin"
+          # 1. Installer (per-user)
+          $p = Start-Process C:\jsitest\setup.exe -ArgumentList "/VERYSILENT","/CURRENTUSER","/SUPPRESSMSGBOXES","/NORESTART","/TASKS=" -Wait -PassThru
+          $exe = Join-Path $env:LOCALAPPDATA "Programs\JustSayIt\JustSayIt.exe"
+          Say "installer exit=$($p.ExitCode) installed=$(Test-Path $exe) path=$exe"
+          # 2. App runs as this user
+          $app = Start-Process $exe -ArgumentList "--selftest","C:\jsitest\selftest.txt" -PassThru
+          $done = $app.WaitForExit(600000)
+          Say "app finished=$done exit=$($app.ExitCode)"
+          # 3. Uninstall (per-user)
+          $un = Get-ChildItem (Split-Path $exe) -Filter "unins*.exe" | Select-Object -First 1
+          $u = Start-Process $un.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          Start-Sleep 3
+          Say "uninstall exit=$($u.ExitCode) removed=$(-not (Test-Path $exe))"
+          # 4. Portable mode (no installer at all)
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\JustSayIt"
+          Expand-Archive C:\jsitest\portable.zip -DestinationPath $dir -Force
+          $pp = Start-Process (Join-Path $dir "JustSayIt.exe") -ArgumentList "--selftest","C:\jsitest\selftest-portable.txt" -PassThru
+          $pdone = $pp.WaitForExit(600000)
+          Say "portable finished=$pdone exit=$($pp.ExitCode)"
+          '@
+          Set-Content "$work\run.ps1" $script
+
+          # Run the script as the standard user via a scheduled task (interactive desktop session).
+          $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File $work\run.ps1"
+          $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Password -RunLevel Limited
+          Register-ScheduledTask -TaskName "jsitest" -Action $action -Principal $principal -Password $pw -User $user | Out-Null
+          Start-ScheduledTask -TaskName "jsitest"
+          $deadline = (Get-Date).AddMinutes(25)
+          do { Start-Sleep 10; $state = (Get-ScheduledTask -TaskName "jsitest").State } while ($state -eq "Running" -and (Get-Date) -lt $deadline)
+
+          Write-Host "---- result ----"; Get-Content "$work\result.txt"
+          foreach ($f in "selftest.txt","selftest-portable.txt") { if (Test-Path "$work\$f") { Write-Host "---- $f ----"; Get-Content "$work\$f" } }
+          $r = Get-Content "$work\result.txt" -Raw
+          if ($r -notmatch "admin=False") { throw "test did not run as a standard user" }
+          if ($r -notmatch "installer exit=0 installed=True") { throw "per-user install failed" }
+          if ($r -notmatch "removed=True") { throw "per-user uninstall failed" }
+          if ($r -notmatch "app finished=True") { throw "app did not run" }
+          if ($r -notmatch "portable finished=True") { throw "portable app did not run" }
+          # The app started and ran its checks as a normal user; settings + speech model live in the user's folders.
+          if (-not (Select-String "$work\selftest.txt" -Pattern "PASS  Settings load/save" -Quiet)) { throw "app could not save settings as a standard user" }
+          Write-Host "Installed, ran and uninstalled as a standard user with no administrator rights."
+
   mac:
     name: Build + text rules (Mac app)
     runs-on: macos-26

@@ -172,6 +172,14 @@ public static class SelfTest
             return Task.FromResult((found.Count == 3 && found.All(m => m.Title != "Lunch"), names));
         });
 
+        await Step("Updates: version check against GitHub", async () =>
+        {
+            bool cmp = Updater.IsNewer("1.10", "1.9") && !Updater.IsNewer("1.5.0", "1.5") && !Updater.IsNewer("1.4", "1.5");
+            await Updater.Shared.Check(true);
+            var u = Updater.Shared;
+            return (cmp && u.Latest != null, $"current={Updater.Current} latest={u.Latest} status=\"{u.Status}\"");
+        }, 60);
+
         await Step("Overlay and result card render", async () =>
         {
             var c = Controller.Shared;

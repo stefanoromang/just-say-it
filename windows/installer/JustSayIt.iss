@@ -3,7 +3,7 @@
 ; https://github.com/stefanoromang/just-say-it
 
 #define AppName "Just Say It"
-#define AppVersion "1.5.0"
+#define AppVersion "1.6.0"
 #define AppPublisher "Stefano Roman Gunness"
 #define AppURL "https://github.com/stefanoromang/just-say-it"
 #define AppExe "JustSayIt.exe"
@@ -23,7 +23,10 @@ VersionInfoDescription={#AppName} Setup
 DefaultDirName={localappdata}\Programs\JustSayIt
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
+; Per-user install: never asks for an administrator password.
 PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=
+UsedUserAreasWarning=no
 OutputDir=..\dist
 OutputBaseFilename=JustSayIt-Setup-{#AppVersion}
 SetupIconFile=..\JustSayIt\AppIcon.ico
@@ -35,7 +38,8 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.19041
-CloseApplications=yes
+CloseApplications=force
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -56,9 +60,12 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Launch Just Say It"; Flags: nowait postinstall skipifsilent
+; Silent updates started from inside the app relaunch it when they finish.
+Filename: "{app}\{#AppExe}"; Parameters: "--background"; Flags: nowait; Check: WizardSilent
 
 [UninstallRun]
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#AppExe}"; Flags: runhidden; RunOnceId: "KillApp"
+; Only closes this user's copy of the app (no admin rights needed).
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#AppExe} /FI ""USERNAME eq {username}"""; Flags: runhidden; RunOnceId: "KillApp"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

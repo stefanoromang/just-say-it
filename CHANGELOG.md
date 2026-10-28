@@ -2,6 +2,19 @@
 
 All notable changes to **Just Say It** (created by Stefano Roman Gunness).
 
+## 1.6 – 2026-10-28
+
+### New: automatic updates (Mac and Windows)
+- Just Say It checks GitHub for a new version when it starts and once a day, and offers **Install update / Later / Skip this version**.
+- **Check for Updates…** in the menu bar / tray, and an **Updates** section in Settings (can be turned off).
+- Mac: rebuilds from the official installer and restarts. Windows: downloads the new setup, installs silently and restarts.
+
+### Windows: no administrator password, ever
+- The app is marked to run as the normal user (`asInvoker`), so Windows never asks for an admin password to start it.
+- The installer, the in-app updater and the one-line installer install **for the current user only** (`%LOCALAPPDATA%\Programs\JustSayIt`), with per-user shortcuts and startup.
+- If a PC blocks setup programs, the one-line installer falls back to a **no-installer (portable) mode** automatically, or use `-Portable`.
+- New automated check: a **standard Windows account with no admin rights** installs, runs, uninstalls and runs the portable version.
+
 ## 1.5 – 2026-10-28
 
 ### New: Meetings – auto-join your calls (Mac and Windows)

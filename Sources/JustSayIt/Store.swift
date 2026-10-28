@@ -146,6 +146,8 @@ struct Prefs: Codable {
     var autoJoinLeadSeconds = 60
     var autoJoinStopGraceSeconds = 120
     var autoJoinExcludedCalendars: [String] = []
+    var checkForUpdates = true
+    var skippedVersion: String?
 
     init() {}
 
@@ -175,6 +177,8 @@ struct Prefs: Codable {
         autoJoinLeadSeconds = (try? c.decode(Int.self, forKey: .autoJoinLeadSeconds)) ?? def.autoJoinLeadSeconds
         autoJoinStopGraceSeconds = (try? c.decode(Int.self, forKey: .autoJoinStopGraceSeconds)) ?? def.autoJoinStopGraceSeconds
         autoJoinExcludedCalendars = (try? c.decode([String].self, forKey: .autoJoinExcludedCalendars)) ?? []
+        checkForUpdates = (try? c.decode(Bool.self, forKey: .checkForUpdates)) ?? def.checkForUpdates
+        skippedVersion = try? c.decode(String.self, forKey: .skippedVersion)
     }
 }
 

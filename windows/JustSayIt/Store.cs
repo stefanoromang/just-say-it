@@ -129,6 +129,8 @@ public class Prefs
     public int AutoJoinLeadSeconds { get; set; } = 60;
     public int AutoJoinStopGraceSeconds { get; set; } = 120;
     public List<CalendarFeed> CalendarFeeds { get; set; } = new();
+    public bool CheckForUpdates { get; set; } = true;
+    public string? SkippedVersion { get; set; }
     public Dictionary<AppCategory, Tone> Tones { get; set; } = new()
     {
         [AppCategory.Email] = Tone.Professional, [AppCategory.Work] = Tone.Professional,

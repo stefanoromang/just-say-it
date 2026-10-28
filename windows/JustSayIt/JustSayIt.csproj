@@ -13,13 +13,14 @@
     <AssemblyName>JustSayIt</AssemblyName>
     <RootNamespace>JustSayIt</RootNamespace>
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <Product>Just Say It</Product>
     <Company>Stefano Roman Gunness</Company>
     <Authors>Stefano Roman Gunness</Authors>
     <Copyright>© 2026 Stefano Roman Gunness. MIT License.</Copyright>
     <Description>Free, private voice typing for Windows.</Description>
-    <Version>1.5.0</Version>
+    <Version>1.6.0</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>

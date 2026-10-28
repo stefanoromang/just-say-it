@@ -9,3 +9,18 @@ struct CaptureContext {
     var windowTitle: String?
     func promptBlock(maxScreen: Int = 1200) -> String { "App: Test" }
 }
+
+/// Same comparison as Updater.isNewer (the real Updater depends on AppKit UI).
+enum Updater {
+    static func isNewer(_ a: String, than b: String) -> Bool {
+        func parts(_ s: String) -> [Int] {
+            s.trimmingCharacters(in: CharacterSet(charactersIn: "vV ")).split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
+        }
+        let x = parts(a), y = parts(b)
+        for i in 0..<max(x.count, y.count) {
+            let l = i < x.count ? x[i] : 0, r = i < y.count ? y[i] : 0
+            if l != r { return l > r }
+        }
+        return false
+    }
+}

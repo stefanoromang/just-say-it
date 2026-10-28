@@ -102,7 +102,9 @@ Then turn on **Join my calendar calls automatically**. The first time you join a
 
 ## Install on Windows
 
-**Easiest:** download **`JustSayIt-Setup-1.5.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. No admin rights needed.
+**No administrator password needed.** Just Say It installs and runs for your Windows account only, so it works on work PCs and normal (non-admin) accounts.
+
+**Easiest:** download **`JustSayIt-Setup-1.6.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
 
 **Or** open PowerShell and paste:
 
@@ -112,7 +114,13 @@ irm https://raw.githubusercontent.com/stefanoromang/just-say-it/main/install-win
 
 (You can also download this repository and double-click `install-windows.cmd`.)
 
-A **portable zip** is on the release page too, if you'd rather not install it.
+**If your PC blocks setup programs**, use the no-installer mode. It unzips the app into your user folder and adds shortcuts:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/stefanoromang/just-say-it/main/install-windows.ps1))) -Portable
+```
+
+The one-line installer also switches to this mode by itself if the setup program is blocked. A **portable zip** is on the release page too.
 
 ### First launch (Windows)
 
@@ -139,6 +147,10 @@ A **portable zip** is on the release page too, if you'd rather not install it.
 | Cancel | **Esc** |
 
 You can change the hotkey (Right Alt, Right Ctrl, F8 or Scroll Lock), speech model, language and AI model in **Settings**.
+
+## Updates
+
+Just Say It checks for new versions automatically (when it starts and once a day) and offers to install them with one click. You can also use **Check for Updates…** in the menu bar / tray, or turn automatic checks off in **Settings › Updates**.
 
 ## Privacy
 
@@ -178,6 +190,7 @@ The Mac app is plain Swift / SwiftUI with no third-party dependencies:
 | `Sources/JustSayIt/NoteWindow.swift` | Live Note Taker window |
 | `Sources/JustSayIt/AutoJoin.swift` | Calendar watching, auto-join and automatic notes |
 | `Sources/JustSayIt/MeetingLinks.swift` | Finds Zoom / Meet / Teams links in calendar events |
+| `Sources/JustSayIt/Updater.swift` | Checks GitHub for updates and installs them |
 
 ### Windows
 
@@ -209,6 +222,8 @@ The Windows app is C# / WinForms, using [Whisper.net](https://github.com/sandroh
 | `windows/JustSayIt/NoteWindow.cs` | Live Note Taker window |
 | `windows/JustSayIt/AutoJoin.cs` | Calendar (ICS) reading, auto-join and automatic notes |
 | `windows/JustSayIt/MeetingLinks.cs` | Finds Zoom / Meet / Teams links in calendar events |
+| `windows/JustSayIt/Updater.cs` | Checks GitHub for updates and installs them (per-user) |
+| `windows/JustSayIt/app.manifest` | Runs as the normal user (no admin prompt) |
 
 ## Tests
 

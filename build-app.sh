@@ -22,8 +22,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>JustSayIt</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.5</string>
-  <key>CFBundleVersion</key><string>6</string>
+  <key>CFBundleShortVersionString</key><string>1.6</string>
+  <key>CFBundleVersion</key><string>7</string>
   <key>NSHumanReadableCopyright</key><string>© 2026 Stefano Roman Gunness. MIT License.</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>LSUIElement</key><true/>
@@ -58,7 +58,7 @@ codesign --force --options runtime --entitlements build/entitlements.plist \
   --sign "Just Say It Local Signing" --keychain "$HOME/Library/Keychains/justsayit-signing.keychain-db" \
   --identifier com.stefano.justsayit "$APP"
 
-pkill -x JustSayIt 2>/dev/null || true
+[ -n "$JUSTSAYIT_UPDATER" ] || pkill -x JustSayIt 2>/dev/null || true
 mkdir -p ~/Applications
 rm -rf ~/Applications/"Just Say It.app"
 cp -R "$APP" ~/Applications/

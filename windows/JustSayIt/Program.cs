@@ -110,8 +110,20 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(rw);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open Just Say It…", null, (_, _) => ShowWindow());
+        var u = Updater.Shared;
+        if (u.UpdateAvailable) menu.Items.Add($"⬆ Install update {u.Latest}", null, (_, _) => _ = u.Install());
+        else menu.Items.Add("Check for Updates…", null, async (_, _) =>
+        {
+            await u.Check(true);
+            if (u.UpdateAvailable)
+            {
+                if (MessageBox.Show($"Just Say It {u.Latest} is available. Install it now?", "Update available", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                    _ = u.Install();
+            }
+            else MessageBox.Show(u.Status, "Just Say It", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        });
         menu.Items.Add("About Just Say It", null, (_, _) =>
-            MessageBox.Show("Just Say It 1.5\n\nCreated by Stefano Roman Gunness\nFree, private voice typing.\n\n© 2026 Stefano Roman Gunness · MIT License\nhttps://github.com/stefanoromang/just-say-it",
+            MessageBox.Show("Just Say It 1.6\n\nCreated by Stefano Roman Gunness\nFree, private voice typing.\n\n© 2026 Stefano Roman Gunness · MIT License\nhttps://github.com/stefanoromang/just-say-it",
                 "About Just Say It", MessageBoxButtons.OK, MessageBoxIcon.Information));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => ExitThread());
