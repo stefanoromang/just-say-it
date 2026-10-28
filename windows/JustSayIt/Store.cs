@@ -136,8 +136,8 @@ public class Prefs
 
 public class Store
 {
-    public static Store Shared { get; } = new();
-
+    // Order matters: static fields initialize top to bottom, and the constructor
+    // uses Dir and Json, so they must come before Shared.
     public static readonly string Dir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JustSayIt");
 
@@ -146,6 +146,8 @@ public class Store
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter() },
     };
+
+    public static Store Shared { get; } = new();
 
     public Prefs Prefs { get; private set; }
     public List<HistoryItem> History { get; private set; }

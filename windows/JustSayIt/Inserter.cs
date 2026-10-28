@@ -68,10 +68,12 @@ public static class Inserter
     {
         if (string.IsNullOrEmpty(text)) return;
         await Focus(target);
-        IDataObject? saved = null;
+        // Copy the user's clipboard contents now: the live clipboard object stops
+        // being readable as soon as we replace it with our text.
+        DataObject? saved = null;
         await Ui.Run(() =>
         {
-            if (restoreClipboard) { try { saved = Clipboard.GetDataObject(); } catch { } }
+            if (restoreClipboard) saved = Snapshot();
             SetClipboard(text);
         });
         await Task.Delay(40);
@@ -81,15 +83,37 @@ public static class Inserter
             await Task.Delay(400);
             await Ui.Run(() =>
             {
-                try
+                for (int i = 0; i < 5; i++)
                 {
-                    var copy = new DataObject();
-                    foreach (var f in saved.GetFormats()) { try { copy.SetData(f, saved.GetData(f)); } catch { } }
-                    Clipboard.SetDataObject(copy, true);
+                    try { Clipboard.SetDataObject(saved, true); return; } catch { Thread.Sleep(30); }
                 }
-                catch { }
             });
         }
+    }
+
+    static DataObject? Snapshot()
+    {
+        try
+        {
+            var live = Clipboard.GetDataObject();
+            if (live == null) return null;
+            var copy = new DataObject();
+            int n = 0;
+            foreach (var f in live.GetFormats(false))
+            {
+                try
+                {
+                    var data = live.GetData(f, false);
+                    if (data == null) continue;
+                    if (data is MemoryStream ms) data = new MemoryStream(ms.ToArray());
+                    copy.SetData(f, false, data);
+                    n++;
+                }
+                catch { }
+            }
+            return n > 0 ? copy : null;
+        }
+        catch { return null; }
     }
 
     public static void SetClipboard(string text)

@@ -104,11 +104,41 @@ public static class ContextReader
         return p.ProcessName;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    struct GUITHREADINFO
+    {
+        public int cbSize, flags;
+        public IntPtr hwndActive, hwndFocus, hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret;
+        public RECT rcCaret;
+    }
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+
+    [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread, ref GUITHREADINFO info);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr pid);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int max);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, StringBuilder l, uint flags, uint timeout, out IntPtr result);
+    [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, IntPtr l, uint flags, uint timeout, out IntPtr result);
+
+    /// The window that has keyboard focus inside the foreground app (works across processes).
+    static IntPtr FocusedControl(IntPtr top)
+    {
+        var info = new GUITHREADINFO { cbSize = Marshal.SizeOf<GUITHREADINFO>() };
+        uint thread = GetWindowThreadProcessId(top, IntPtr.Zero);
+        return GetGUIThreadInfo(thread, ref info) ? info.hwndFocus : IntPtr.Zero;
+    }
+
     static void ReadAutomation(CaptureContext c)
     {
+        var hwndFocus = FocusedControl(c.Window);
         try
         {
-            var focused = AutomationElement.FocusedElement;
+            AutomationElement? focused = null;
+            try { focused = AutomationElement.FocusedElement; } catch { }
+            // Prefer the element for the focused native control when UIA's global focus is stale.
+            if (hwndFocus != IntPtr.Zero && (focused == null || focused.Current.NativeWindowHandle == 0 || focused.Current.ProcessId != ProcessOf(c.Window)))
+            {
+                try { focused = AutomationElement.FromHandle(hwndFocus); } catch { }
+            }
             if (focused != null)
             {
                 var ct = focused.Current.ControlType;
@@ -118,7 +148,7 @@ public static class ContextReader
                     var v = (ValuePattern)vp;
                     if (!v.Current.IsReadOnly) editable = true;
                     var val = v.Current.Value;
-                    if (!string.IsNullOrEmpty(val)) c.TextBeforeCursor = val.Length > 1500 ? val[^1500..] : val;
+                    if (!string.IsNullOrEmpty(val)) c.TextBeforeCursor = Tail(val);
                 }
                 if (focused.TryGetCurrentPattern(TextPattern.Pattern, out var tp))
                 {
@@ -128,20 +158,54 @@ public static class ContextReader
                     {
                         var s = sel[0].GetText(4000);
                         if (!string.IsNullOrWhiteSpace(s)) c.SelectedText = s;
-                        // Text from start of document to the cursor.
                         var before = t.DocumentRange.Clone();
                         before.MoveEndpointByRange(TextPatternRangeEndpoint.End, sel[0], TextPatternRangeEndpoint.Start);
                         var b = before.GetText(-1);
-                        if (!string.IsNullOrEmpty(b)) c.TextBeforeCursor = b.Length > 1500 ? b[^1500..] : b;
+                        if (!string.IsNullOrEmpty(b)) c.TextBeforeCursor = Tail(b);
                     }
                     editable = editable || ct == ControlType.Edit;
                 }
                 c.FieldIsEditable = editable;
             }
-            if (IsBrowser(c.ProcessName)) c.Url = BrowserUrl(c.Window);
         }
         catch { }
+
+        // Classic Win32 / WinForms edit controls: read text and selection directly.
+        if (hwndFocus != IntPtr.Zero) ReadNativeEdit(hwndFocus, c);
+
+        try { if (IsBrowser(c.ProcessName)) c.Url = BrowserUrl(c.Window); } catch { }
     }
+
+    static int ProcessOf(IntPtr h) { GetWindowThreadProcessId(h, out var pid); return (int)pid; }
+
+    static void ReadNativeEdit(IntPtr h, CaptureContext c)
+    {
+        var cls = new StringBuilder(128);
+        GetClassName(h, cls, cls.Capacity);
+        var name = cls.ToString();
+        bool isEdit = name.Equals("Edit", StringComparison.OrdinalIgnoreCase) || name.Contains("EDIT", StringComparison.OrdinalIgnoreCase)
+                      || name.StartsWith("RichEdit", StringComparison.OrdinalIgnoreCase);
+        if (!isEdit) return;
+        const uint WM_GETTEXTLENGTH = 0x000E, WM_GETTEXT = 0x000D, EM_GETSEL = 0x00B0, SMTO_ABORTIFHUNG = 0x0002;
+        SendMessageTimeout(h, WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 200, out var lenPtr);
+        int len = (int)lenPtr;
+        if (len <= 0) { c.FieldIsEditable = true; return; }
+        var buf = new StringBuilder(len + 1);
+        SendMessageTimeout(h, WM_GETTEXT, (IntPtr)(len + 1), buf, SMTO_ABORTIFHUNG, 200, out _);
+        var text = buf.ToString();
+        // EM_GETSEL packs start/end into the return value (works across processes).
+        SendMessageTimeout(h, EM_GETSEL, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 200, out var sel);
+        long packed = sel.ToInt64();
+        int start = (int)(packed & 0xFFFF), end = (int)((packed >> 16) & 0xFFFF);
+        if (text.Length > 0xFFFF && start == 0xFFFF) { start = end = text.Length; }
+        start = Math.Clamp(start, 0, text.Length);
+        end = Math.Clamp(end, start, text.Length);
+        c.FieldIsEditable = true;
+        if (string.IsNullOrEmpty(c.TextBeforeCursor) || c.TextBeforeCursor.Length < start) c.TextBeforeCursor = Tail(text[..start]);
+        if (c.SelectedText == null && end > start) c.SelectedText = text[start..end];
+    }
+
+    static string Tail(string s) => s.Length > 1500 ? s[^1500..] : s;
 
     /// Reads the address bar of Chromium browsers and Firefox via UI Automation.
     static string? BrowserUrl(IntPtr hwnd)
