@@ -14,15 +14,22 @@ namespace JustSayIt;
 public static class SelfTest
 {
     static readonly List<(string name, bool ok, string detail)> results = new();
+    static string report = "selftest-report.txt";
 
     static void Record(string name, bool ok, string detail = "")
     {
         results.Add((name, ok, detail));
-        Console.WriteLine($"{(ok ? "PASS" : "FAIL")}  {name}  {detail}");
+        var line = $"{(ok ? "PASS" : "FAIL")}  {name}  {detail}";
+        Console.WriteLine(line);
+        File.AppendAllText(report, line + Environment.NewLine);
     }
+
+    static void Log(string msg) => File.AppendAllText(report, $"  … {DateTime.Now:HH:mm:ss} {msg}{Environment.NewLine}");
 
     public static async Task<int> Run(string reportPath)
     {
+        report = reportPath;
+        File.WriteAllText(report, $"Just Say It self-test · {DateTime.Now:u} · {Environment.OSVersion}{Environment.NewLine}{Environment.NewLine}");
         var sw = Stopwatch.StartNew();
         await Step("Settings load/save", () =>
         {
@@ -35,18 +42,19 @@ public static class SelfTest
         {
             await Transcriber.EnsureModel(ModelSize.Base);
             return (Transcriber.ModelExists(ModelSize.Base), new FileInfo(Transcriber.ModelPath(ModelSize.Base)).Length / 1_048_576 + " MB");
-        });
+        }, 400);
         await Step("Whisper transcribes synthesized speech", async () =>
         {
             const string sentence = "Please send the quarterly report to the marketing team by Friday.";
-            var samples = Synthesize(sentence);
+            var samples = await Task.Run(() => Synthesize(sentence));
+            Log($"synthesized {samples.Length / 16000.0:F1}s of audio");
             using var t = new Transcriber();
             var timer = Stopwatch.StartNew();
             var text = await t.TranscribeSamples(samples, ModelSize.Base, "en", Array.Empty<string>());
             var heard = text.ToLowerInvariant();
             bool ok = heard.Contains("report") && heard.Contains("marketing") && heard.Contains("friday");
             return (ok, $"\"{text}\" ({timer.ElapsedMilliseconds} ms)");
-        });
+        }, 240);
 
         // 2. Text cleanup rules (same code the app uses).
         await Step("Cleanup rules", () =>
@@ -55,58 +63,52 @@ public static class SelfTest
             return Task.FromResult((o == "Send it monday, please", o));
         });
 
-        // 3. Context + insertion against a real text box in a real window.
-        using var form = new Form { Text = "JustSayIt SelfTest Target", Width = 700, Height = 300, StartPosition = FormStartPosition.CenterScreen, TopMost = true };
-        var box = new TextBox { Multiline = true, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 14f) };
-        form.Controls.Add(box);
-        form.Show();
-        form.Activate();
-        box.Focus();
-        box.Text = "Hello Maria Rossi, thanks for the invoice. ";
-        box.SelectionStart = box.TextLength;
-        await Pump(600);
-        ForceForeground(form.Handle);
-        await Pump(300);
+        // 3. Context + insertion against a real text box in a separate UI thread
+        //    (in real use the target app is another process, never our own thread).
+        var target = Target.Start();
+        Log("target window ready");
+        await Pump(500);
+        ForceForeground(target.Handle);
+        await Pump(400);
 
         await Step("Context: app, window, text box", () =>
         {
             var c = ContextReader.Capture();
-            bool ok = c.Window == form.Handle && c.FieldIsEditable == true && (c.TextBeforeCursor ?? "").Contains("Maria Rossi");
+            bool ok = c.Window == target.Handle && c.FieldIsEditable == true && (c.TextBeforeCursor ?? "").Contains("Maria Rossi");
             return Task.FromResult((ok, $"app={c.AppName} title={c.WindowTitle} editable={c.FieldIsEditable} before=\"{c.TextBeforeCursor}\""));
         });
 
         await Step("Context: selected text", async () =>
         {
-            box.Select(6, 11); // "Maria Rossi"
-            await Pump(200);
+            target.Do(b => b.Select(6, 11)); // "Maria Rossi"
+            await Pump(250);
             var c = ContextReader.Capture();
-            box.SelectionStart = box.TextLength;
-            box.SelectionLength = 0;
+            target.Do(b => { b.SelectionStart = b.TextLength; b.SelectionLength = 0; });
             return (c.SelectedText == "Maria Rossi", $"selected=\"{c.SelectedText}\"");
         });
 
         await Step("Screen reading (Windows OCR)", async () =>
         {
-            var text = await ScreenReader.Read(form.Handle);
+            var text = await ScreenReader.Read(target.Handle);
             bool ok = text != null && text.Contains("Maria", StringComparison.OrdinalIgnoreCase);
             return (ok, text == null ? "no text (OCR language pack missing?)" : $"\"{text.Replace('\n', ' ')}\"");
         });
 
         await Step("Paste into focused text box", async () =>
         {
-            ForceForeground(form.Handle);
-            box.Focus();
-            box.SelectionStart = box.TextLength;
-            await Pump(200);
-            await Inserter.Insert("I'll pay it today.", form.Handle, restoreClipboard: true);
-            await Pump(700);
-            return (box.Text.EndsWith("I'll pay it today."), $"box=\"{box.Text}\"");
+            ForceForeground(target.Handle);
+            target.Do(b => { b.Focus(); b.SelectionStart = b.TextLength; });
+            await Pump(250);
+            await Inserter.Insert("I'll pay it today.", target.Handle, restoreClipboard: true);
+            await Pump(800);
+            var text = target.Get(b => b.Text);
+            return (text.EndsWith("I'll pay it today."), $"box=\"{text}\"");
         });
 
         await Step("Clipboard restored after paste", async () =>
         {
             Inserter.SetClipboard("user clipboard");
-            await Inserter.Insert("x", form.Handle, restoreClipboard: true);
+            await Inserter.Insert("x", target.Handle, restoreClipboard: true);
             await Pump(800);
             var clip = Clipboard.ContainsText() ? Clipboard.GetText() : "";
             return (clip == "user clipboard", $"clipboard=\"{clip}\"");
@@ -142,21 +144,21 @@ public static class SelfTest
             return (ok, "");
         });
 
-        form.Close();
+        target.Close();
         var passed = results.Count(r => r.ok);
-        var lines = new List<string> { $"Just Say It self-test · {DateTime.Now:u} · {Environment.OSVersion} · {sw.Elapsed.TotalSeconds:F1}s", "" };
-        lines.AddRange(results.Select(r => $"{(r.ok ? "PASS" : "FAIL")}  {r.name}  {r.detail}"));
-        lines.Add("");
-        lines.Add($"{passed}/{results.Count} passed");
-        File.WriteAllLines(reportPath, lines);
+        File.AppendAllText(report, $"{Environment.NewLine}{passed}/{results.Count} passed in {sw.Elapsed.TotalSeconds:F1}s{Environment.NewLine}");
         return passed == results.Count ? 0 : 1;
     }
 
-    static async Task Step(string name, Func<Task<(bool ok, string detail)>> body)
+    static async Task Step(string name, Func<Task<(bool ok, string detail)>> body, int timeoutSeconds = 90)
     {
+        Log("start: " + name);
         try
         {
-            var (ok, detail) = await body();
+            var work = body();
+            var done = await Task.WhenAny(work, Task.Delay(TimeSpan.FromSeconds(timeoutSeconds)));
+            if (done != work) { Record(name, false, $"timed out after {timeoutSeconds}s"); return; }
+            var (ok, detail) = await work;
             Record(name, ok, detail);
         }
         catch (Exception e) { Record(name, false, e.GetType().Name + ": " + e.Message); }
@@ -192,4 +194,42 @@ public static class SelfTest
     }
 
     static void SendKey(byte vk, bool up) => keybd_event(vk, 0, (up ? 2u : 0u) | 1u /*EXTENDED*/, UIntPtr.Zero);
+
+    /// A text-box window running on its own STA thread with its own message loop.
+    sealed class Target
+    {
+        public Form Form = null!;
+        public TextBox Box = null!;
+        public IntPtr Handle;
+
+        public static Target Start()
+        {
+            var t = new Target();
+            var ready = new ManualResetEventSlim();
+            var th = new Thread(() =>
+            {
+                t.Form = new Form { Text = "JustSayIt SelfTest Target", Width = 700, Height = 300, StartPosition = FormStartPosition.CenterScreen, TopMost = true };
+                t.Box = new TextBox { Multiline = true, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 14f) };
+                t.Form.Controls.Add(t.Box);
+                t.Form.Shown += (_, _) =>
+                {
+                    t.Box.Text = "Hello Maria Rossi, thanks for the invoice. ";
+                    t.Box.Focus();
+                    t.Box.SelectionStart = t.Box.TextLength;
+                    t.Handle = t.Form.Handle;
+                    ready.Set();
+                };
+                Application.Run(t.Form);
+            });
+            th.SetApartmentState(ApartmentState.STA);
+            th.IsBackground = true;
+            th.Start();
+            ready.Wait(TimeSpan.FromSeconds(20));
+            return t;
+        }
+
+        public void Do(Action<TextBox> a) => Form.Invoke(() => a(Box));
+        public T Get<T>(Func<TextBox, T> f) => (T)Form.Invoke(() => f(Box))!;
+        public void Close() { try { Form.Invoke(() => Form.Close()); } catch { } }
+    }
 }

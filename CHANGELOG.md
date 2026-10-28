@@ -2,6 +2,11 @@
 
 All notable changes to **Just Say It** (created by Stefano Roman Gunness).
 
+## Unreleased
+
+### Windows
+- **End-to-end self-test on real Windows** (`JustSayIt.exe --selftest report.txt`): synthesizes speech and transcribes it with Whisper, reads context from a real text box, runs screen OCR, pastes text, checks clipboard restore, presses the hotkey and renders the overlay and result card. Runs on GitHub's Windows machines after every change.
+
 ## 1.2 – 2026-10-27
 
 ### Windows

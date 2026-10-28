@@ -48,8 +48,9 @@ jobs:
         shell: pwsh
         run: |
           $p = Start-Process out\JustSayIt.exe -ArgumentList "--selftest", "$PWD\selftest-report.txt" -PassThru
-          if (-not $p.WaitForExit(600000)) { $p.Kill(); throw "Self-test timed out" }
-          Get-Content selftest-report.txt
+          $finished = $p.WaitForExit(900000)
+          if (Test-Path selftest-report.txt) { Get-Content selftest-report.txt }
+          if (-not $finished) { $p.Kill(); throw "Self-test timed out" }
           exit $p.ExitCode
       - uses: actions/upload-artifact@v5
         if: always()

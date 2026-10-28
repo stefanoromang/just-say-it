@@ -183,7 +183,13 @@ swift run RuleTests                                          # Mac text rules
 dotnet test windows/JustSayIt.Tests/JustSayIt.Tests.csproj   # Windows text rules
 ```
 
-Both run automatically on GitHub for every change. See [CHANGELOG.md](CHANGELOG.md) for what's new.
+On Windows you can also run a full end-to-end self-test of the real app: speech, context, screen reading, pasting and hotkey.
+
+```powershell
+JustSayIt.exe --selftest selftest-report.txt
+```
+
+All of these run automatically on GitHub for every change. The Windows self-test runs on a real Windows machine. See [CHANGELOG.md](CHANGELOG.md) for what's new.
 
 ## Uninstall
 
