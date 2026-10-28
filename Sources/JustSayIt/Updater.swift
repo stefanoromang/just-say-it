@@ -30,8 +30,12 @@ final class Updater: ObservableObject {
             await check(userInitiated: false)
         }
         timer = Timer.scheduledTimer(withTimeInterval: 24 * 3600, repeats: true) { _ in
-            MainActor.assumeIsolated { Task { await Updater.shared.check(userInitiated: false) } }
+            MainActor.assumeIsolated { Updater.shared.dailyCheck() }
         }
+    }
+
+    private func dailyCheck() {
+        Task { @MainActor in await self.check(userInitiated: false) }
     }
 
     static func log(_ s: String) {

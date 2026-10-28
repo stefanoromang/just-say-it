@@ -83,10 +83,15 @@ jobs:
       - name: Install and run as a standard user (no admin)
         shell: pwsh
         run: |
-          $user = "jsitest"; $pw = "Jsi-" + [guid]::NewGuid().ToString("N").Substring(0, 12) + "!a1"
-          net user $user $pw /add | Out-Null
+          $user = "jsitest"
+          # 14 characters max: longer passwords make "net user" stop and ask a question.
+          $pw = "Jt" + [guid]::NewGuid().ToString("N").Substring(0, 8) + "!a1"
+          $sec = ConvertTo-SecureString $pw -AsPlainText -Force
+          New-LocalUser -Name $user -Password $sec -PasswordNeverExpires -AccountNeverExpires | Out-Null
+          Add-LocalGroupMember -Group "Users" -Member $user
+          Get-LocalUser $user | Format-Table Name, Enabled
           # Not added to Administrators: a normal user account.
-          if ((net localgroup Administrators) -match "^$user$") { throw "test user is an admin" }
+          if (Get-LocalGroupMember -Group "Administrators" | Where-Object Name -like "*\$user") { throw "test user is an admin" }
           $cred = New-Object PSCredential(".\$user", (ConvertTo-SecureString $pw -AsPlainText -Force))
           $work = "C:\jsitest"; New-Item -ItemType Directory $work -Force | Out-Null
           Copy-Item (Get-Item windows\dist\JustSayIt-Setup-*.exe).FullName "$work\setup.exe"
@@ -124,8 +129,7 @@ jobs:
 
           # Run the script as the standard user via a scheduled task (interactive desktop session).
           $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File $work\run.ps1"
-          $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Password -RunLevel Limited
-          Register-ScheduledTask -TaskName "jsitest" -Action $action -Principal $principal -Password $pw -User $user | Out-Null
+          Register-ScheduledTask -TaskName "jsitest" -Action $action -User "$env:COMPUTERNAME\$user" -Password $pw -RunLevel Limited | Out-Null
           Start-ScheduledTask -TaskName "jsitest"
           $deadline = (Get-Date).AddMinutes(25)
           do { Start-Sleep 10; $state = (Get-ScheduledTask -TaskName "jsitest").State } while ($state -eq "Running" -and (Get-Date) -lt $deadline)
