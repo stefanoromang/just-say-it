@@ -127,14 +127,28 @@ jobs:
           '@
           Set-Content "$work\run.ps1" $script
 
-          # Run the script as the standard user via a scheduled task (interactive desktop session).
+          # Run the script as the standard user.
+          # "Batch" logon needs that right; grant it (to this test account only) for the scheduled task.
+          $sid = (Get-LocalUser $user).SID.Value
+          secedit /export /cfg C:\jsitest\sec.inf /areas USER_RIGHTS | Out-Null
+          $inf = Get-Content C:\jsitest\sec.inf
+          if ($inf -match "^SeBatchLogonRight") { $inf = $inf -replace "^(SeBatchLogonRight = .*)$", "`$1,*$sid" } else { $inf = $inf -replace "^\[Privilege Rights\]$", "[Privilege Rights]`r`nSeBatchLogonRight = *$sid" }
+          Set-Content C:\jsitest\sec.inf $inf -Encoding Unicode
+          secedit /configure /db C:\jsitest\sec.sdb /cfg C:\jsitest\sec.inf /areas USER_RIGHTS | Out-Null
+          # Create the user's profile folder first (normally done at first sign-in).
+          Start-Process cmd.exe -ArgumentList "/c echo profile" -Credential $cred -LoadUserProfile -Wait -WindowStyle Hidden
+
           $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File $work\run.ps1"
           Register-ScheduledTask -TaskName "jsitest" -Action $action -User "$env:COMPUTERNAME\$user" -Password $pw -RunLevel Limited | Out-Null
           Start-ScheduledTask -TaskName "jsitest"
           $deadline = (Get-Date).AddMinutes(25)
-          do { Start-Sleep 10; $state = (Get-ScheduledTask -TaskName "jsitest").State } while ($state -eq "Running" -and (Get-Date) -lt $deadline)
+          do { Start-Sleep 10; $state = (Get-ScheduledTask -TaskName "jsitest").State } while ($state -ne "Ready" -and (Get-Date) -lt $deadline)
+          $info = Get-ScheduledTaskInfo -TaskName "jsitest"
+          Write-Host ("task state={0} lastResult=0x{1:X}" -f $state, $info.LastTaskResult)
 
-          Write-Host "---- result ----"; Get-Content "$work\result.txt"
+          Write-Host "---- result ----"
+          if (-not (Test-Path "$work\result.txt")) { throw "the standard-user script did not run (see task result above)" }
+          Get-Content "$work\result.txt"
           foreach ($f in "selftest.txt","selftest-portable.txt") { if (Test-Path "$work\$f") { Write-Host "---- $f ----"; Get-Content "$work\$f" } }
           $r = Get-Content "$work\result.txt" -Raw
           if ($r -notmatch "admin=False") { throw "test did not run as a standard user" }
