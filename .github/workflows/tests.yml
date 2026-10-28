@@ -29,6 +29,34 @@ jobs:
           dotnet-version: "10.0.x"
       - run: dotnet build windows/JustSayIt/JustSayIt.csproj -c Release
 
+  windows-selftest:
+    name: End-to-end self-test (real Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - name: Cache speech model
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\JustSayIt\models
+          key: whisper-base-v1
+      - name: Publish
+        run: dotnet publish windows/JustSayIt/JustSayIt.csproj -c Release -r win-x64 --self-contained true -o out
+      - name: Run self-test
+        shell: pwsh
+        run: |
+          $p = Start-Process out\JustSayIt.exe -ArgumentList "--selftest", "$PWD\selftest-report.txt" -PassThru
+          if (-not $p.WaitForExit(600000)) { $p.Kill(); throw "Self-test timed out" }
+          Get-Content selftest-report.txt
+          exit $p.ExitCode
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: windows-selftest-report
+          path: selftest-report.txt
+
   mac:
     name: Build + text rules (Mac app)
     runs-on: macos-26

@@ -117,6 +117,12 @@ public sealed class Transcriber : IDisposable
             samples = new float[bytes.Length / 2];
             for (int i = 0; i < samples.Length; i++) samples[i] = BitConverter.ToInt16(bytes, i * 2) / 32768f;
         }
+        return await TranscribeSamples(samples, model, language, vocabulary);
+    }
+
+    /// Transcribes 16 kHz mono samples (also used by the self-test).
+    public async Task<string> TranscribeSamples(float[] samples, ModelSize model, string language, IEnumerable<string> vocabulary)
+    {
         if (samples.Length < 16000 / 4) return "";
 
         return await Task.Run(async () =>

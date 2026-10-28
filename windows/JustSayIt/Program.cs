@@ -13,6 +13,21 @@ static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--selftest")
+        {
+            ApplicationConfiguration.Initialize();
+            Ui.Context = new WindowsFormsSynchronizationContext();
+            SynchronizationContext.SetSynchronizationContext(Ui.Context);
+            var report = args.Length > 1 ? args[1] : Path.Combine(Environment.CurrentDirectory, "selftest-report.txt");
+            int code = 1;
+            var t = SelfTest.Run(report);
+            t.ContinueWith(r => { code = r.IsCompletedSuccessfully ? r.Result : 1; Application.ExitThread(); },
+                TaskScheduler.FromCurrentSynchronizationContext());
+            Application.Run();
+            Environment.Exit(code);
+            return;
+        }
+
         single = new Mutex(true, "JustSayIt.SingleInstance", out bool first);
         if (!first) return;
 
