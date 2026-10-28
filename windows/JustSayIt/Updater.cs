@@ -120,7 +120,7 @@ public sealed class Updater
             Set("Installing… Just Say It will restart.");
             // The installer closes this app, installs over it and relaunches it.
             // /CURRENTUSER keeps it a per-user install, so no administrator prompt appears.
-            Process.Start(new ProcessStartInfo(path, "/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /CURRENTUSER")
+            Process.Start(new ProcessStartInfo(path, "/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /CURRENTUSER /RELAUNCH")
             { UseShellExecute = true });
             await Task.Delay(1500);
             await Ui.Run(Application.Exit);

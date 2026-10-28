@@ -13,6 +13,7 @@ All notable changes to **Just Say It** (created by Stefano Roman Gunness).
 - The app is marked to run as the normal user (`asInvoker`), so Windows never asks for an admin password to start it.
 - The installer, the in-app updater and the one-line installer install **for the current user only** (`%LOCALAPPDATA%\Programs\JustSayIt`), with per-user shortcuts and startup.
 - If a PC blocks setup programs, the one-line installer falls back to a **no-installer (portable) mode** automatically, or use `-Portable`.
+- Fixed: the one-line installer could wait forever after installing, because it waited for the app it had just started.
 - New automated check: a **standard Windows account with no admin rights** installs, runs, uninstalls and runs the portable version.
 
 ## 1.5 – 2026-10-28

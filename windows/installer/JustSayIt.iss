@@ -60,8 +60,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Launch Just Say It"; Flags: nowait postinstall skipifsilent
-; Silent updates started from inside the app relaunch it when they finish.
-Filename: "{app}\{#AppExe}"; Parameters: "--background"; Flags: nowait; Check: WizardSilent
+; Updates started from inside the app (with /RELAUNCH) restart it when they finish.
+Filename: "{app}\{#AppExe}"; Parameters: "--background"; Flags: nowait; Check: ShouldRelaunch
 
 [UninstallRun]
 ; Only closes this user's copy of the app (no admin rights needed).
@@ -69,3 +69,9 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#AppExe} /FI ""USERNAME eq 
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+
+[Code]
+function ShouldRelaunch: Boolean;
+begin
+  Result := WizardSilent and (Pos('/RELAUNCH', UpperCase(GetCmdTail)) > 0);
+end;

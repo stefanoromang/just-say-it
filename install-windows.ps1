@@ -79,7 +79,8 @@ if ($Portable -or -not $setup) {
     Write-Host "Installing..."
     try {
         # /CURRENTUSER forces a per-user install; it never shows an administrator prompt.
-        $p = Start-Process -FilePath $out -ArgumentList "/SILENT", "/CURRENTUSER", "/TASKS=desktopicon,startup" -Wait -PassThru
+        $p = Start-Process -FilePath $out -ArgumentList "/SILENT", "/CURRENTUSER", "/TASKS=desktopicon,startup" -PassThru
+        $p.WaitForExit()
         $ok = ($p.ExitCode -eq 0) -and (Test-Path $exe)
     } catch { $ok = $false }
     Remove-Item $out -ErrorAction SilentlyContinue
