@@ -1,8 +1,12 @@
 # Changelog
 
-All notable changes to **Just Say It** (created by Stefano Roman Gunness).
+All notable changes to **Just Say It**, an original app designed and built by **Stefano Roman Gunness**.
 
 ## 1.8 – 2026-10-29
+
+### Documentation
+- README rewritten: a full **Note Taker** guide (start/stop, what it captures, live window, saved notes, CollectivIQ hand-off, privacy and consent), the story behind the app, and a **Built with** section crediting the platforms and open-source libraries used.
+- New **NOTICE.md**: authorship, third-party licenses and trademark notes.
 
 ### CollectivIQ: standard meeting-analysis prompt (Mac and Windows)
 - Every note or transcript sent to CollectivIQ now starts with a detailed **16-section meeting analysis prompt**: metadata, participants, opening, chronological flow, key points, decisions, open questions, risks, blockers, solutions, resolved issues, timelines, action items (Action → Owner → Due Date), key quotes, closing and overall assessment, in plain text with nested bullets.

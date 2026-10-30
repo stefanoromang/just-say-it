@@ -5,16 +5,26 @@
 <h1 align="center">Just Say It</h1>
 
 <p align="center">
-  <b>Free, unlimited, private voice typing for Mac and Windows.</b><br>
-  Talk instead of type. Get clean, ready-to-send text in any app.<br><br>
-  Created by <b>Stefano Roman Gunness</b>
+  <b>Free, unlimited, private voice typing and meeting notes for Mac and Windows.</b><br>
+  Talk instead of type. Record any conversation. Get clean, ready-to-use text.<br><br>
+  An original app designed and built by <b>Stefano Roman Gunness</b>
 </p>
 
 ---
 
 Just Say It turns your voice into polished text wherever your cursor is: Gmail, Outlook, Slack, Notion, ChatGPT, VS Code, anything. Hold a key, talk naturally, let go. Filler words disappear, punctuation is fixed, and the tone matches the app you're in.
 
+Press **Right Shift three times** and the **Note Taker** records and transcribes a whole conversation or call, then turns it into structured meeting notes.
+
 Everything runs **on your computer**. There's no account, no subscription, no word limit, and your voice never leaves your machine.
+
+### Why I built it
+
+I wanted one tool that does two things well: lets me *write by talking* anywhere on my computer, and *never take meeting notes by hand again*. I wanted it free, unlimited, private and on both Mac and Windows. Just Say It is my own design, from the hotkeys and the per-app tone system to the Note Taker, the calendar auto-join and the CollectivIQ hand-off. It's built entirely on the speech and AI engines that run on your own machine.
+
+— Stefano Roman Gunness
+
+**Contents:** [Features](#features) · [Requirements](#requirements) · [Install on Mac](#install-on-mac) · [Note Taker](#note-taker) · [Meetings](#meetings-auto-join-and-take-notes) · [Install on Windows](#install-on-windows) · [Updates](#updates) · [Privacy](#privacy) · [Build from source](#build-from-source) · [Author](#author)
 
 ## Features
 
@@ -31,7 +41,7 @@ Everything runs **on your computer**. There's no account, no subscription, no wo
 - **Snippets.** Say a short phrase to insert an address, a link, or a signature.
 - **Hotkeys.** Hold to talk, double-tap for hands-free, Shift for Scribe, Esc to cancel.
 - **Many languages**, all processed on-device (40+ on Mac, ~100 with auto-detect on Windows).
-- **Note Taker.** Press **Right Shift three times** to record and transcribe a conversation or call (you and the other side), then get a summary with key points, decisions and action items. Saved as Markdown in Documents › Just Say It Notes.
+- **Note Taker.** Press **Right Shift three times** to record and transcribe a conversation or call (you and the other side), with live transcript, speaker labels, automatic meeting notes and Markdown files. [More below](#note-taker).
 - **Send to CollectivIQ.** After each recording, sends your own prompt + the full transcript to a new CollectivIQ chat inside the app (sign in once in the app's CollectivIQ window).
 - **Auto-join meetings.** Connects to your **Google and Microsoft calendars**, joins your **Zoom, Google Meet and Teams** calls on time, and takes notes for each one automatically.
 - **History and stats.** Words dictated, speaking speed, time saved. Stored only on your computer.
@@ -43,7 +53,8 @@ Everything runs **on your computer**. There's no account, no subscription, no wo
 | System | macOS 26 (Tahoe) or newer | Windows 10 (2004+) or Windows 11, 64-bit |
 | Hardware | Apple silicon (M1 or newer) | Any modern PC; 8 GB RAM recommended |
 | Speech engine | Apple on-device `SpeechAnalyzer` (built in) | OpenAI Whisper via whisper.cpp (downloaded once, offline after) |
-| Smart AI (cleanup, Scribe, Rewrite) | Apple Intelligence (built in) | [Ollama](https://ollama.com) with a free local model (optional) |
+| Smart AI (cleanup, Scribe, Rewrite, meeting notes) | Apple Intelligence (built in) | [Ollama](https://ollama.com) with a free local model (optional) |
+| Note Taker: other side of calls | Screen Recording permission | Built in |
 
 ## Install on Mac
 
@@ -81,6 +92,54 @@ The installer builds the app on your Mac and puts it in `~/Applications`. If App
 | Cancel | **Esc** |
 
 You can change the hotkey, language, tones, dictionary and snippets in the app window.
+
+## Note Taker
+
+The Note Taker records and transcribes conversations, such as calls, interviews, stand-ups and client meetings, and turns them into notes you can use.
+
+### Start and stop
+
+| | Mac | Windows |
+|---|---|---|
+| Start / stop | Press **Right ⇧ Shift three times** quickly | Press **Right Shift three times** quickly |
+| Also from | Menu bar → **Start Note Taker**, or the **Note Taker** page | Tray menu → **Start Note Taker**, or the **Note Taker** tab |
+| Automatically | When a calendar meeting starts (see [Meetings](#meetings-auto-join-and-take-notes)) | Same |
+
+Normal typing with Shift never triggers it: only three quick taps within about a second do, with no other keys pressed.
+
+### What it captures
+
+- **Me:** your microphone.
+- **Others:** your computer's sound, which is the other people on Zoom, Google Meet, Teams or any call app. On Mac this needs the **Screen Recording** permission; on Windows it works without extra setup. You can turn it off in Settings.
+- Every line is **timestamped** and labelled **Me** or **Others**.
+
+### While you record
+
+A small floating window shows the **live transcript**, a timer, and **Stop** and **Copy transcript** buttons. You can keep working in any app; the window stays on top and never takes focus.
+
+### When you stop
+
+1. **The transcript is finished** and saved.
+2. **Meeting notes are written automatically:** Summary, Key points, Decisions and Action items (who → what → when). On Mac this uses Apple Intelligence; on Windows, the optional local Ollama model.
+3. **A Markdown file is saved** in **Documents › Just Say It Notes**, named with the date and the meeting title. It includes the date, duration, attendees (for calendar meetings), the notes and the full timestamped transcript. The file is updated **while you talk**, so nothing is lost if your computer restarts.
+4. **Optional:** the transcript is sent to **CollectivIQ** for a deeper analysis (see below).
+
+All saved notes are listed on the **Note Taker** page, where you can open them or show them in Finder or Explorer.
+
+### Send to CollectivIQ
+
+After each recording, Just Say It can hand the transcript to **CollectivIQ**, inside the app with no browser needed:
+
+1. On the **CollectivIQ** page (Mac) or in the **Note Taker** tab (Windows), click **Sign in to CollectivIQ** and sign in once with your own account. Tick **Remember me**.
+2. Turn on **After each Note Taker recording, send my prompt + the transcript to CollectivIQ**.
+3. When a recording stops, Just Say It opens a new CollectivIQ chat, pastes the prompt and the full transcript, and presses **Send**.
+
+The built-in prompt asks for a **16-section meeting analysis**: metadata, participants, how it started, the chronological flow, key points, decisions, open questions, risks, blockers, solutions, resolved issues, timelines, action items (Action → Owner → Due Date), key quotes, how it ended and an overall assessment. You can edit it, or click **Reset to the standard meeting prompt** to restore it. **Send my last note now** sends any saved note on demand.
+
+### Privacy and consent
+
+- Recording and transcription happen **on your computer**. Audio is never uploaded. The summary is written on your device. Only the text you choose to send goes to CollectivIQ.
+- **Always tell people you're recording.** Recording laws differ by country and state; some require everyone's consent.
 
 ## Meetings: auto-join and take notes
 
@@ -248,8 +307,18 @@ All of these run automatically on GitHub for every change. The Windows self-test
 
 ## Author
 
-**Stefano Roman Gunness** designed and created Just Say It.
+**Stefano Roman Gunness** conceived, designed and built Just Say It: the product idea, the features, the user experience and all of the app's code, on Mac and Windows.
+
+## Built with
+
+Just Say It is original software. It uses these platforms and open-source libraries under their own licenses:
+
+- **Mac:** Apple's Speech (`SpeechAnalyzer`), Foundation Models (Apple Intelligence), Vision, ScreenCaptureKit, EventKit and WebKit frameworks.
+- **Windows:** [Whisper.net](https://github.com/sandrohanea/whisper.net) / [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with OpenAI's Whisper models (MIT), [NAudio](https://github.com/naudio/NAudio) (MIT), [Ical.Net](https://github.com/ical-org/ical.net) (MIT), Microsoft WebView2, and Windows' built-in OCR and UI Automation. Optional local AI via [Ollama](https://ollama.com).
+- **CollectivIQ** is a separate service with its own terms. You need your own CollectivIQ account to use that integration.
+
+Zoom, Google Meet, Microsoft Teams, Google Calendar and Outlook are trademarks of their respective owners. They're mentioned only to describe compatibility, and Just Say It isn't affiliated with or endorsed by them. Full details are in [NOTICE.md](NOTICE.md).
 
 ## License
 
-[MIT](LICENSE) © 2026 Stefano Roman Gunness. You're free to use, modify and share it; please keep the copyright notice.
+[MIT](LICENSE) © 2026 Stefano Roman Gunness. You're free to use, modify and share it; please keep the copyright notice and credit the author.
