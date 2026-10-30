@@ -22,9 +22,9 @@ enum CollectivIQ {
         return s
     }
 
-    static func send(title: String?, transcript: String) {
+    static func send(title: String?, transcript: String, force: Bool = false) {
         let p = Store.shared.prefs
-        guard p.ciqEnabled, !transcript.isEmpty else { return }
+        guard (p.ciqEnabled || force), !transcript.isEmpty else { return }
         let text = message(prompt: p.ciqPrompt, title: title, transcript: transcript)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)

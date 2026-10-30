@@ -41,6 +41,11 @@ struct MenuContent: View {
         Button("Start / Stop Dictation") { c.toggleFromMenu() }
         Button(NoteTaker.shared.isRecording ? "Stop Note Taker" : "Start Note Taker (Right ⇧ ×3)") { c.toggleNotes() }
         Button("Show Note Taker") { NoteWindow.shared.show() }
+        Button("CollectivIQ…") {
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "main")
+            NotificationCenter.default.post(name: .openPane, object: "CollectivIQ")
+        }
         if let next = AutoJoin.shared.upcoming.first(where: { $0.end > Date() }) {
             Button("Join now: \(next.title) (\(next.start.formatted(date: .omitted, time: .shortened)))") { AutoJoin.shared.join(next, automatic: false) }
         }

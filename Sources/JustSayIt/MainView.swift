@@ -3,13 +3,14 @@ import Speech
 import SwiftUI
 
 enum Pane: String, CaseIterable, Identifiable {
-    case home = "Home", meetings = "Meetings", notes = "Note Taker", style = "Tone & Style", dictionary = "Dictionary", snippets = "Snippets", rewrite = "AI Rewrite", history = "History", settings = "Settings"
+    case home = "Home", collectiviq = "CollectivIQ", meetings = "Meetings", notes = "Note Taker", style = "Tone & Style", dictionary = "Dictionary", snippets = "Snippets", rewrite = "AI Rewrite", history = "History", settings = "Settings"
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .home: "house"
         case .notes: "note.text"
         case .meetings: "video"
+        case .collectiviq: "bubble.left.and.text.bubble.right"
         case .style: "theatermasks"
         case .dictionary: "character.book.closed"
         case .snippets: "text.badge.plus"
@@ -38,6 +39,7 @@ struct MainView: View {
                     case .home: HomePane(c: c, store: store)
                     case .notes: NotesPane(store: store)
                     case .meetings: MeetingsPane(store: store)
+                    case .collectiviq: CollectivIQPane(store: store)
                     case .style: StylePane(store: store)
                     case .dictionary: DictionaryPane(store: store)
                     case .snippets: SnippetsPane(store: store)
@@ -52,6 +54,9 @@ struct MainView: View {
             .navigationTitle(ui.pane.rawValue)
         }
         .onAppear { c.refreshPermissions() }
+        .onReceive(NotificationCenter.default.publisher(for: .openPane)) { note in
+            if let raw = note.object as? String, let p = Pane(rawValue: raw) { ui.pane = p }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in c.refreshPermissions() }
     }
 }
@@ -430,6 +435,10 @@ struct SettingsPane: View {
     }
 }
 
+extension Notification.Name {
+    static let openPane = Notification.Name("JustSayIt.openPane")
+}
+
 @MainActor
 final class UIState: ObservableObject {
     @Published var pane: Pane = .home
@@ -473,24 +482,8 @@ struct NotesPane: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
             }
-            GroupBox("Send to CollectivIQ") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("After each recording, open CollectivIQ with my prompt + the transcript", isOn: $store.prefs.ciqEnabled)
-                    Text("Prompt").font(.caption.bold())
-                    TextEditor(text: $store.prefs.ciqPrompt)
-                        .font(.body).frame(height: 60)
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
-                    Text("When a recording stops, the note is saved on this Mac, then collectiviq.ai opens in your browser with the prompt and full transcript copied. Sign in there once (the browser remembers you), press **⌘V** in the chat box, then **Return**.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    HStack {
-                        Button("Open CollectivIQ") { NSWorkspace.shared.open(CollectivIQ.chatURL) }
-                        if let u = n.lastNoteURL, let text = try? String(contentsOf: u, encoding: .utf8) {
-                            Button("Send last note now") { CollectivIQ.send(title: u.deletingPathExtension().lastPathComponent, transcript: text) }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
-            }
+            Label("Send recordings to CollectivIQ: see **CollectivIQ** in the sidebar.", systemImage: "bubble.left.and.text.bubble.right")
+                .font(.caption).foregroundStyle(.secondary)
             Text("Saved notes").font(.headline)
             if n.saved.isEmpty {
                 Text("No notes yet.").foregroundStyle(.secondary)
@@ -622,5 +615,71 @@ struct UpdatesSection: View {
             }
             if !u.status.isEmpty { Text(u.status).font(.caption).foregroundStyle(.secondary) }
         }
+    }
+}
+
+// MARK: CollectivIQ
+
+struct CollectivIQPane: View {
+    @ObservedObject var store: Store
+    @ObservedObject var n = NoteTaker.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Connect Just Say It to **CollectivIQ**: after every Note Taker recording, CollectivIQ opens with your prompt and the full transcript, ready to send.")
+                .foregroundStyle(.secondary)
+
+            GroupBox("1. Sign in to CollectivIQ") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Sign in on the CollectivIQ website with your own email and password, and tick **Remember me**. Your browser keeps you signed in; Just Say It never stores your CollectivIQ password.")
+                        .font(.callout)
+                    Button {
+                        NSWorkspace.shared.open(URL(string: "https://collectiviq.ai/login")!)
+                    } label: { Label("Sign in to CollectivIQ", systemImage: "person.crop.circle.badge.checkmark") }
+                    .buttonStyle(.borderedProminent).tint(.purple)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+
+            GroupBox("2. Turn it on") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("After each Note Taker recording, open CollectivIQ with my prompt + the transcript", isOn: $store.prefs.ciqEnabled)
+                    Text(store.prefs.ciqEnabled ? "✓ Connected: CollectivIQ opens automatically when a recording stops." : "Off: recordings are only saved on this Mac.")
+                        .font(.caption).foregroundStyle(store.prefs.ciqEnabled ? .green : .secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+
+            GroupBox("3. Your prompt") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Sent before the transcript. Change it to anything you like.").font(.caption).foregroundStyle(.secondary)
+                    TextEditor(text: $store.prefs.ciqPrompt)
+                        .font(.body).frame(height: 80)
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
+                    Button("Reset to default") { store.prefs.ciqPrompt = CollectivIQ.defaultPrompt }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+
+            GroupBox("How it works") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Press **Right ⇧ three times** to start the Note Taker, and three times again to stop.", systemImage: "1.circle")
+                    Label("The note is saved in Documents › Just Say It Notes.", systemImage: "2.circle")
+                    Label("CollectivIQ opens with your prompt + the transcript copied.", systemImage: "3.circle")
+                    Label("Click the chat box, press **⌘V**, then **Return**.", systemImage: "4.circle")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+
+            HStack {
+                Button("Open CollectivIQ chat") { NSWorkspace.shared.open(CollectivIQ.chatURL) }
+                if let u = n.lastNoteURL ?? n.saved.first?.url, let text = try? String(contentsOf: u, encoding: .utf8) {
+                    Button("Send my last note now") {
+                        CollectivIQ.send(title: u.deletingPathExtension().lastPathComponent, transcript: text, force: true)
+                    }
+                }
+            }
+        }
+        .onAppear { n.refreshSaved() }
     }
 }
