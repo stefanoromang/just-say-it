@@ -32,7 +32,7 @@ Everything runs **on your computer**. There's no account, no subscription, no wo
 - **Hotkeys.** Hold to talk, double-tap for hands-free, Shift for Scribe, Esc to cancel.
 - **Many languages**, all processed on-device (40+ on Mac, ~100 with auto-detect on Windows).
 - **Note Taker.** Press **Right Shift three times** to record and transcribe a conversation or call (you and the other side), then get a summary with key points, decisions and action items. Saved as Markdown in Documents › Just Say It Notes.
-- **Send to CollectivIQ.** After each recording, opens collectiviq.ai with your own prompt + the full transcript ready to paste.
+- **Send to CollectivIQ.** After each recording, sends your own prompt + the full transcript to a new CollectivIQ chat inside the app (sign in once in the app's CollectivIQ window).
 - **Auto-join meetings.** Connects to your **Google and Microsoft calendars**, joins your **Zoom, Google Meet and Teams** calls on time, and takes notes for each one automatically.
 - **History and stats.** Words dictated, speaking speed, time saved. Stored only on your computer.
 

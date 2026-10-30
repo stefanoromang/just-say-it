@@ -626,15 +626,15 @@ struct CollectivIQPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Connect Just Say It to **CollectivIQ**: after every Note Taker recording, CollectivIQ opens with your prompt and the full transcript, ready to send.")
+            Text("Connect Just Say It to **CollectivIQ**. After every Note Taker recording, the transcript is sent to a new CollectivIQ chat **inside Just Say It**, with no browser needed.")
                 .foregroundStyle(.secondary)
 
             GroupBox("1. Sign in to CollectivIQ") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Sign in on the CollectivIQ website with your own email and password, and tick **Remember me**. Your browser keeps you signed in; Just Say It never stores your CollectivIQ password.")
+                    Text("Opens CollectivIQ in a Just Say It window. Sign in once with your own email and password and tick **Remember me**. The window keeps you signed in.")
                         .font(.callout)
                     Button {
-                        NSWorkspace.shared.open(URL(string: "https://collectiviq.ai/login")!)
+                        CollectivIQ.showWindow(signIn: true)
                     } label: { Label("Sign in to CollectivIQ", systemImage: "person.crop.circle.badge.checkmark") }
                     .buttonStyle(.borderedProminent).tint(.purple)
                 }
@@ -643,8 +643,8 @@ struct CollectivIQPane: View {
 
             GroupBox("2. Turn it on") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Toggle("After each Note Taker recording, open CollectivIQ with my prompt + the transcript", isOn: $store.prefs.ciqEnabled)
-                    Text(store.prefs.ciqEnabled ? "✓ Connected: CollectivIQ opens automatically when a recording stops." : "Off: recordings are only saved on this Mac.")
+                    Toggle("After each Note Taker recording, send my prompt + the transcript to CollectivIQ", isOn: $store.prefs.ciqEnabled)
+                    Text(store.prefs.ciqEnabled ? "✓ On: when a recording stops, a new CollectivIQ chat is sent automatically." : "Off: recordings are only saved on this Mac.")
                         .font(.caption).foregroundStyle(store.prefs.ciqEnabled ? .green : .secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
@@ -665,14 +665,14 @@ struct CollectivIQPane: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Press **Right ⇧ three times** to start the Note Taker, and three times again to stop.", systemImage: "1.circle")
                     Label("The note is saved in Documents › Just Say It Notes.", systemImage: "2.circle")
-                    Label("CollectivIQ opens with your prompt + the transcript copied.", systemImage: "3.circle")
-                    Label("Click the chat box, press **⌘V**, then **Return**.", systemImage: "4.circle")
+                    Label("The CollectivIQ window opens a new chat, pastes your prompt + the transcript and presses Send.", systemImage: "3.circle")
+                    Label("If you aren't signed in yet, sign in in that window, and the transcript is sent right after.", systemImage: "4.circle")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
             }
 
             HStack {
-                Button("Open CollectivIQ chat") { NSWorkspace.shared.open(CollectivIQ.chatURL) }
+                Button("Open CollectivIQ") { CollectivIQ.showWindow() }
                 if let u = n.lastNoteURL ?? n.saved.first?.url, let text = try? String(contentsOf: u, encoding: .utf8) {
                     Button("Send my last note now") {
                         CollectivIQ.send(title: u.deletingPathExtension().lastPathComponent, transcript: text, force: true)

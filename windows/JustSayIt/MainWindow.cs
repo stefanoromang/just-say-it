@@ -235,17 +235,27 @@ public sealed class MainWindow : Form
         page.Enter += (_, _) => Reload();
         list.DoubleClick += (_, _) => { if (list.SelectedItem is string n) Open(Path.Combine(NoteTaker.NotesDir, n)); };
         var ciq = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
-        var ciqOn = new CheckBox { Text = "After each recording, open CollectivIQ with my prompt + the transcript", Checked = store.Prefs.CiqEnabled, AutoSize = true };
+        var ciqOn = new CheckBox { Text = "After each recording, send my prompt + the transcript to CollectivIQ", Checked = store.Prefs.CiqEnabled, AutoSize = true };
         ciqOn.CheckedChanged += (_, _) => { store.Prefs.CiqEnabled = ciqOn.Checked; store.Save(); };
         var prompt = new TextBox { Multiline = true, Width = 760, Height = 60, Text = store.Prefs.CiqPrompt };
         prompt.Leave += (_, _) => { store.Prefs.CiqPrompt = prompt.Text; store.Save(); };
+        var signIn = new Button { Text = "Sign in to CollectivIQ", AutoSize = true };
+        signIn.Click += (_, _) => CollectivIQ.OpenChat(signIn: true);
         var openCiq = new Button { Text = "Open CollectivIQ", AutoSize = true };
         openCiq.Click += (_, _) => CollectivIQ.OpenChat();
+        var sendLast = new Button { Text = "Send my last note now", AutoSize = true };
+        sendLast.Click += (_, _) =>
+        {
+            var last = Directory.GetFiles(NoteTaker.NotesDir, "*.md").OrderByDescending(File.GetLastWriteTime).FirstOrDefault();
+            if (last != null) CollectivIQ.Send(Path.GetFileNameWithoutExtension(last), File.ReadAllText(last), force: true);
+        };
         ciq.Controls.Add(ciqOn);
         ciq.Controls.Add(L("Prompt", Small, Color.DimGray));
         ciq.Controls.Add(prompt);
-        ciq.Controls.Add(L("When a recording stops, the note is saved on this PC, then collectiviq.ai opens in your browser with the prompt and full transcript copied. Sign in there once (the browser remembers you), press Ctrl+V in the chat box, then Enter.", Small, Color.DimGray, 760));
-        ciq.Controls.Add(openCiq);
+        ciq.Controls.Add(L("When a recording stops, the note is saved on this PC, then CollectivIQ opens in a Just Say It window, starts a new chat, pastes your prompt + the full transcript and presses Send. Sign in once in that window (tick Remember me); if you aren't signed in, the transcript is sent right after you sign in.", Small, Color.DimGray, 760));
+        var ciqButtons = new FlowLayoutPanel { AutoSize = true };
+        ciqButtons.Controls.AddRange(new Control[] { signIn, openCiq, sendLast });
+        ciq.Controls.Add(ciqButtons);
         f.Controls.Add(Group("Send to CollectivIQ", ciq));
         f.Controls.Add(L("Saved notes (double-click to open)", H2));
         f.Controls.Add(list);
