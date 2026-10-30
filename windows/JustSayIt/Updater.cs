@@ -70,14 +70,23 @@ public sealed class Updater
         Set("Checking for updates…");
         try
         {
-            using var doc = JsonDocument.Parse(await Http.GetStringAsync($"https://api.github.com/repos/{Repo}/releases/latest"));
-            var root = doc.RootElement;
-            Latest = root.GetProperty("tag_name").GetString()?.TrimStart('v', 'V');
-            Notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
-            setupUrl = root.GetProperty("assets").EnumerateArray()
-                .Select(a => (name: a.GetProperty("name").GetString() ?? "", url: a.GetProperty("browser_download_url").GetString() ?? ""))
-                .FirstOrDefault(a => a.name.StartsWith("JustSayIt-Setup-") && a.name.EndsWith(".exe")).url;
-            if (string.IsNullOrEmpty(setupUrl)) setupUrl = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(await Http.GetStringAsync($"https://api.github.com/repos/{Repo}/releases/latest"));
+                var root = doc.RootElement;
+                Latest = root.GetProperty("tag_name").GetString()?.TrimStart('v', 'V');
+                Notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
+                setupUrl = root.GetProperty("assets").EnumerateArray()
+                    .Select(a => (name: a.GetProperty("name").GetString() ?? "", url: a.GetProperty("browser_download_url").GetString() ?? ""))
+                    .FirstOrDefault(a => a.name.StartsWith("JustSayIt-Setup-") && a.name.EndsWith(".exe")).url;
+                if (string.IsNullOrEmpty(setupUrl)) setupUrl = null;
+            }
+            catch (HttpRequestException)
+            {
+                // GitHub's API limits anonymous requests (shared office networks can hit it).
+                // The public "latest release" page isn't limited: read the version from its redirect.
+                await CheckViaReleasePage();
+            }
 
             if (UpdateAvailable)
             {
@@ -87,6 +96,21 @@ public sealed class Updater
             else Set(Latest != null && IsNewer(Latest, Current) ? $"Version {Latest} is being prepared, try again in a few minutes." : $"You're up to date ({Current}).");
         }
         catch (Exception e) { Set(userInitiated ? "Couldn't check for updates: " + e.Message : ""); }
+    }
+
+    static readonly HttpClient NoRedirect = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
+
+    async Task CheckViaReleasePage()
+    {
+        using var resp = await NoRedirect.GetAsync($"https://github.com/{Repo}/releases/latest");
+        var tag = resp.Headers.Location?.ToString().Split('/').LastOrDefault();
+        if (string.IsNullOrEmpty(tag) || !tag.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+            throw new HttpRequestException("Could not read the latest version");
+        Latest = tag.TrimStart('v', 'V');
+        Notes = "";
+        var parts = Latest.Split('.');
+        var full = parts.Length >= 3 ? Latest : Latest + ".0";
+        setupUrl = $"https://github.com/{Repo}/releases/download/{tag}/JustSayIt-Setup-{full}.exe";
     }
 
     void Prompt()

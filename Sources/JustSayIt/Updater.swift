@@ -45,6 +45,13 @@ final class Updater: ObservableObject {
         else { try? line.write(to: url, atomically: true, encoding: .utf8) }
     }
 
+    /// Reads the version from github.com/…/releases/latest, which redirects to …/tag/vX.Y.
+    nonisolated static func latestFromReleasePage() async throws -> String {
+        let (_, resp) = try await URLSession.shared.data(from: URL(string: "https://github.com/\(repo)/releases/latest")!)
+        guard let tag = resp.url?.lastPathComponent, tag.lowercased().hasPrefix("v") else { throw URLError(.cannotParseResponse) }
+        return tag.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+    }
+
     /// "1.10" > "1.9", "2.0" > "1.12.3".
     nonisolated static func isNewer(_ a: String, than b: String) -> Bool {
         func parts(_ s: String) -> [Int] {
@@ -65,11 +72,16 @@ final class Updater: ObservableObject {
             var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!)
             req.setValue("JustSayIt/\(current)", forHTTPHeaderField: "User-Agent")
             req.timeoutInterval = 20
-            let (data, _) = try await URLSession.shared.data(for: req)
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let tag = json["tag_name"] as? String else { throw URLError(.cannotParseResponse) }
-            latest = tag.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
-            notes = (json["body"] as? String) ?? ""
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let tag = json["tag_name"] as? String, (resp as? HTTPURLResponse)?.statusCode == 200 {
+                latest = tag.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+                notes = (json["body"] as? String) ?? ""
+            } else {
+                // GitHub's API limits anonymous requests; the public release page isn't limited.
+                latest = try await Self.latestFromReleasePage()
+                notes = ""
+            }
             lastChecked = Date()
             Self.log("checked: current=\(current) latest=\(latest ?? "nil") available=\(updateAvailable)")
             if updateAvailable {

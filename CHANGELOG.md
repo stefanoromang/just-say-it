@@ -7,7 +7,10 @@ All notable changes to **Just Say It** (created by Stefano Roman Gunness).
 ### New: send recordings to CollectivIQ (Mac and Windows)
 - When a Note Taker recording finishes, the note is saved on your computer as before, then **collectiviq.ai opens in your browser** with **your prompt + the full transcript** copied. Press **⌘V / Ctrl+V** in the chat box and **Return / Enter**.
 - Each person signs in to CollectivIQ on the website themselves (the browser remembers them); the app never stores CollectivIQ passwords.
-- Turn it on and set your own prompt in **Note Taker › Send to CollectivIQ**. Default prompt: a meeting recap with key points, decisions, action items and open questions.
+- Turn it on and set your own prompt in **Note Taker › Send to CollectivIQ**.
+
+### Fixed
+- Update checks no longer fail when GitHub's API rate limit is reached (common on shared office networks); the app falls back to the public release page. Default prompt: a meeting recap with key points, decisions, action items and open questions.
 
 ## 1.6 – 2026-10-28
 
