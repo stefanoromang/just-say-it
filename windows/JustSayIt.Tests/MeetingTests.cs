@@ -74,3 +74,27 @@ public class CalendarParseTests
         Assert.DoesNotContain("Lunch", found);
     }
 }
+
+/// Live-call detection helpers (same logic as CallApps in the Windows app).
+public class LiveCallTitleTests
+{
+    static MeetingPlatform? ForTitle(string title)
+    {
+        var t = title.ToLowerInvariant();
+        if (t.StartsWith("meet - ") || t.StartsWith("meet – ") || t.Contains("google meet") || t.Contains("meet.google.com")) return MeetingPlatform.Meet;
+        if (t.Contains("microsoft teams")) return MeetingPlatform.Teams;
+        if (t.Contains("zoom meeting") || t.Contains("zoom workplace") || t.Contains("zoom webinar")) return MeetingPlatform.Zoom;
+        return null;
+    }
+
+    [Theory]
+    [InlineData("Meet - abc-defg-hij - Google Chrome", MeetingPlatform.Meet)]
+    [InlineData("Weekly sync | Microsoft Teams", MeetingPlatform.Teams)]
+    [InlineData("Zoom Meeting", MeetingPlatform.Zoom)]
+    public void DetectsCallWindows(string title, MeetingPlatform expected) => Assert.Equal(expected, ForTitle(title));
+
+    [Theory]
+    [InlineData("Inbox (3) - Gmail - Google Chrome")]
+    [InlineData("YouTube - Google Chrome")]
+    public void IgnoresOtherWindows(string title) => Assert.Null(ForTitle(title));
+}

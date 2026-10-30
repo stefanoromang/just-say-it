@@ -119,10 +119,11 @@ public sealed class AutoJoin
         _ = Task.Run(async () =>
         {
             var notes = NoteTaker.Shared;
+            if (notes.IsRecording && notes.CurrentOrigin == NoteTaker.Origin.Call) return;   // the live call is already being recorded
             if (notes.IsRecording) await notes.Stop();
             await Task.Delay(4000);
             await Ui.Run(NoteWindow.ShowShared);
-            await notes.Start(m);
+            await notes.Start(m, NoteTaker.Origin.Calendar);
         });
     }
 

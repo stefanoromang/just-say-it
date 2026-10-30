@@ -148,6 +148,10 @@ struct Prefs: Codable {
     var autoJoinExcludedCalendars: [String] = []
     var checkForUpdates = true
     var skippedVersion: String?
+    var autoRecordCalls = true
+    var recordTeamsCalls = true
+    var recordZoomCalls = true
+    var recordMeetCalls = true
     var ciqEnabled = false
     var ciqPrompt = ciqStandardPrompt
 
@@ -181,6 +185,10 @@ struct Prefs: Codable {
         autoJoinExcludedCalendars = (try? c.decode([String].self, forKey: .autoJoinExcludedCalendars)) ?? []
         checkForUpdates = (try? c.decode(Bool.self, forKey: .checkForUpdates)) ?? def.checkForUpdates
         skippedVersion = try? c.decode(String.self, forKey: .skippedVersion)
+        autoRecordCalls = (try? c.decode(Bool.self, forKey: .autoRecordCalls)) ?? def.autoRecordCalls
+        recordTeamsCalls = (try? c.decode(Bool.self, forKey: .recordTeamsCalls)) ?? def.recordTeamsCalls
+        recordZoomCalls = (try? c.decode(Bool.self, forKey: .recordZoomCalls)) ?? def.recordZoomCalls
+        recordMeetCalls = (try? c.decode(Bool.self, forKey: .recordMeetCalls)) ?? def.recordMeetCalls
         ciqEnabled = (try? c.decode(Bool.self, forKey: .ciqEnabled)) ?? def.ciqEnabled
         ciqPrompt = (try? c.decode(String.self, forKey: .ciqPrompt)) ?? def.ciqPrompt
         // Upgrade people still on the old short default to the standard meeting prompt.

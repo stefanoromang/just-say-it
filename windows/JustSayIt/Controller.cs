@@ -52,6 +52,7 @@ public sealed class Controller : IDisposable
         AutoJoin.Shared.Boot();
         ContextReader.WarmUp();
         Updater.Shared.Boot();
+        CallWatcher.Shared.Boot();
     }
 
     public async Task PrepareModel()

@@ -2,6 +2,15 @@
 
 All notable changes to **Just Say It**, an original app designed and built by **Stefano Roman Gunness**.
 
+## 1.9 – 2026-10-30
+
+### New: record every live call automatically (Mac and Windows)
+- When a **Microsoft Teams**, **Zoom** or **Google Meet** call starts (one you join, answer or start), the **Note Taker starts by itself** and records you and the other people. When the call ends, it **stops and saves the transcript** (and sends it to CollectivIQ if that's on).
+- Works in the **Teams and Zoom apps** and in **Chrome, Edge, Safari, Brave, Arc and Firefox** (Google Meet, Teams on the web, Zoom web client).
+- Detects calls by watching which app is using your microphone, so it reacts to real calls, not just opening the app. Recording starts after about 3 seconds and stops about 10 seconds after the call ends.
+- **On by default.** Turn it off, or choose Teams / Zoom / Meet individually, in **Meetings › Record every live call automatically**.
+- Works alongside calendar auto-join: a call that's already being recorded isn't recorded twice.
+
 ## 1.8 – 2026-10-29
 
 ### Documentation

@@ -131,6 +131,10 @@ public class Prefs
     public List<CalendarFeed> CalendarFeeds { get; set; } = new();
     public bool CheckForUpdates { get; set; } = true;
     public string? SkippedVersion { get; set; }
+    public bool AutoRecordCalls { get; set; } = true;
+    public bool RecordTeamsCalls { get; set; } = true;
+    public bool RecordZoomCalls { get; set; } = true;
+    public bool RecordMeetCalls { get; set; } = true;
     public bool CiqEnabled { get; set; } = false;
     public string CiqPrompt { get; set; } = Prompts.CiqStandard;
     public Dictionary<AppCategory, Tone> Tones { get; set; } = new()

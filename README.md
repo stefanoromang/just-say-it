@@ -43,6 +43,7 @@ I wanted one tool that does two things well: lets me *write by talking* anywhere
 - **Many languages**, all processed on-device (40+ on Mac, ~100 with auto-detect on Windows).
 - **Note Taker.** Press **Right Shift three times** to record and transcribe a conversation or call (you and the other side), with live transcript, speaker labels, automatic meeting notes and Markdown files. [More below](#note-taker).
 - **Send to CollectivIQ.** After each recording, sends your own prompt + the full transcript to a new CollectivIQ chat inside the app (sign in once in the app's CollectivIQ window).
+- **Records every live call automatically.** Join or answer a Teams, Zoom or Google Meet call, in the app or in your browser, and the Note Taker records and transcribes it, then saves it when the call ends.
 - **Auto-join meetings.** Connects to your **Google and Microsoft calendars**, joins your **Zoom, Google Meet and Teams** calls on time, and takes notes for each one automatically.
 - **History and stats.** Words dictated, speaking speed, time saved. Stored only on your computer.
 
@@ -103,7 +104,7 @@ The Note Taker records and transcribes conversations, such as calls, interviews,
 |---|---|---|
 | Start / stop | Press **Right ⇧ Shift three times** quickly | Press **Right Shift three times** quickly |
 | Also from | Menu bar → **Start Note Taker**, or the **Note Taker** page | Tray menu → **Start Note Taker**, or the **Note Taker** tab |
-| Automatically | When a calendar meeting starts (see [Meetings](#meetings-auto-join-and-take-notes)) | Same |
+| Automatically | **Whenever a Teams, Zoom or Google Meet call starts**, and when a calendar meeting starts (see [Meetings](#meetings-auto-join-and-take-notes)) | Same |
 
 Normal typing with Shift never triggers it: only three quick taps within about a second do, with no other keys pressed.
 
@@ -143,6 +144,16 @@ The built-in prompt asks for a **16-section meeting analysis**: metadata, partic
 
 ## Meetings: auto-join and take notes
 
+### Every live call is recorded automatically
+
+Join, answer or start a call in **Microsoft Teams**, **Zoom** or **Google Meet** (the desktop apps, or Chrome, Edge, Safari, Brave, Arc or Firefox). Just Say It notices the call is using your microphone and **starts the Note Taker by itself**. When you hang up, it **stops and saves the transcript** automatically, and sends it to CollectivIQ if you turned that on.
+
+- It reacts to **real calls only**: opening Teams or Zoom, or having a Meet tab open, doesn't start a recording. Only an active call using the microphone does.
+- **On by default.** Change it in **Meetings › Record every live call automatically**, where you can also pick Teams, Zoom and Meet individually.
+- On Mac, allow **Screen Recording** to capture the other people too; on Windows that works without extra setup.
+
+### Join calendar meetings for you
+
 Just Say It joins your calls **from your own computer**, using your own Zoom, Meet or Teams account. It doesn't send a bot. When a call starts:
 
 1. It opens the meeting (Zoom straight in the Zoom app; Meet and Teams on their join screen).
@@ -164,7 +175,7 @@ Then turn on **Join my calendar calls automatically**. The first time you join a
 
 **No administrator password needed.** Just Say It installs and runs for your Windows account only, so it works on work PCs and normal (non-admin) accounts.
 
-**Easiest:** download **`JustSayIt-Setup-1.8.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
+**Easiest:** download **`JustSayIt-Setup-1.9.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
 
 **Or** open PowerShell and paste:
 
@@ -249,6 +260,7 @@ The Mac app is plain Swift / SwiftUI with no third-party dependencies:
 | `Sources/JustSayIt/NoteCapture.swift` | Long-form transcription and computer-audio capture |
 | `Sources/JustSayIt/NoteWindow.swift` | Live Note Taker window |
 | `Sources/JustSayIt/AutoJoin.swift` | Calendar watching, auto-join and automatic notes |
+| `Sources/JustSayIt/CallWatcher.swift` | Detects live Teams / Zoom / Meet calls and records them |
 | `Sources/JustSayIt/MeetingLinks.swift` | Finds Zoom / Meet / Teams links in calendar events |
 | `Sources/JustSayIt/Updater.swift` | Checks GitHub for updates and installs them |
 
@@ -281,6 +293,7 @@ The Windows app is C# / WinForms, using [Whisper.net](https://github.com/sandroh
 | `windows/JustSayIt/NoteTaker.cs` | Note Taker: mic + computer audio, chunked Whisper, summary, files |
 | `windows/JustSayIt/NoteWindow.cs` | Live Note Taker window |
 | `windows/JustSayIt/AutoJoin.cs` | Calendar (ICS) reading, auto-join and automatic notes |
+| `windows/JustSayIt/CallWatcher.cs` | Detects live Teams / Zoom / Meet calls and records them |
 | `windows/JustSayIt/MeetingLinks.cs` | Finds Zoom / Meet / Teams links in calendar events |
 | `windows/JustSayIt/Updater.cs` | Checks GitHub for updates and installs them (per-user) |
 | `windows/JustSayIt/app.manifest` | Runs as the normal user (no admin prompt) |

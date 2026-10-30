@@ -175,6 +175,23 @@ public sealed class MainWindow : Form
         auto.Controls.Add(L("Zoom opens directly in the Zoom app. Google Meet and Teams open their join screen; the first time, sign in and choose “remember” so later calls connect straight away.", Small, Color.DimGray, 760));
         f.Controls.Add(Group("2. Automatic joining", auto));
 
+        var rec = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+        rec.Controls.Add(Check("When a Teams, Zoom or Google Meet call starts, record and transcribe it", p.AutoRecordCalls, v => p.AutoRecordCalls = v));
+        var which = new FlowLayoutPanel { AutoSize = true };
+        which.Controls.Add(Check("Microsoft Teams", p.RecordTeamsCalls, v => p.RecordTeamsCalls = v));
+        which.Controls.Add(Check("Zoom", p.RecordZoomCalls, v => p.RecordZoomCalls = v));
+        which.Controls.Add(Check("Google Meet", p.RecordMeetCalls, v => p.RecordMeetCalls = v));
+        rec.Controls.Add(which);
+        rec.Controls.Add(L("Works for calls you join, answer or start, in the Teams and Zoom apps or in Chrome, Edge, Brave or Firefox. Recording starts a few seconds after the call uses your microphone and stops when the call ends; the transcript is saved (and sent to CollectivIQ if that's on).", Small, Color.DimGray, 760));
+        var recStatus = L("", Small, Color.Firebrick);
+        rec.Controls.Add(recStatus);
+        void RenderRec() { var c = CallWatcher.Shared.ActiveCall; recStatus.Text = c != null ? $"● Recording: {c.Title} ({MeetingLinks.Name(c.Platform)})" : CallWatcher.Shared.Status; }
+        void OnRec() => Ui.Run(() => { if (!IsDisposed) RenderRec(); });
+        CallWatcher.Shared.Changed += OnRec;
+        FormClosed += (_, _) => CallWatcher.Shared.Changed -= OnRec;
+        RenderRec();
+        f.Controls.Add(Group("Record every live call automatically", rec));
+
         var status = L("", Small, Color.FromArgb(110, 70, 220));
         f.Controls.Add(status);
         var head = new FlowLayoutPanel { AutoSize = true };
@@ -524,7 +541,7 @@ public sealed class MainWindow : Form
 
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 1.8 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 1.9 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

@@ -49,6 +49,10 @@ final class NoteTaker: ObservableObject {
     private var context = ""
     private(set) var meeting: UpcomingMeeting?
 
+    /// What started the current recording.
+    enum Origin { case manual, calendar, call }
+    private(set) var origin: Origin = .manual
+
     private init() { refreshSaved() }
 
     func toggle() {
@@ -58,12 +62,16 @@ final class NoteTaker: ObservableObject {
     // MARK: Start / stop
 
     /// Starts notes for a calendar meeting (title and attendees go into the note).
-    func start(meeting m: UpcomingMeeting) async {
+    func start(meeting m: UpcomingMeeting, origin o: Origin = .calendar) async {
         meeting = m
+        origin = o
         await start(keepMeeting: true)
     }
 
-    func start() async { await start(keepMeeting: false) }
+    func start() async {
+        origin = .manual
+        await start(keepMeeting: false)
+    }
 
     private func start(keepMeeting: Bool) async {
         guard !isRecording else { return }

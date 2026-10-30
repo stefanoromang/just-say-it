@@ -127,10 +127,11 @@ final class AutoJoin: ObservableObject {
         current = m
         let notes = NoteTaker.shared
         Task {
+            if notes.isRecording && notes.origin == .call { return }   // the live call is already being recorded
             if notes.isRecording { await notes.stop() }
             // Give the meeting app a moment to connect audio.
             try? await Task.sleep(nanoseconds: 4_000_000_000)
-            await notes.start(meeting: m)
+            await notes.start(meeting: m, origin: .calendar)
         }
     }
 

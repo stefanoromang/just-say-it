@@ -12,6 +12,42 @@ struct MeetingLink: Equatable {
     let url: URL
 }
 
+/// Recognises call apps from the microphone user's bundle ID, browser tab URLs and window titles.
+enum CallApps {
+    enum Kind: Equatable { case native(MeetingPlatform), browser(String) }
+
+    /// Microphone users that can be a live call. Helper processes share the app's bundle prefix.
+    static func kind(bundleID raw: String) -> Kind? {
+        let b = raw.lowercased()
+        if b.hasPrefix("com.microsoft.teams") { return .native(.teams) }
+        if b.hasPrefix("us.zoom.") { return .native(.zoom) }
+        let browsers: [(String, String)] = [
+            ("com.google.chrome", "Google Chrome"), ("com.microsoft.edgemac", "Microsoft Edge"),
+            ("com.brave.browser", "Brave Browser"), ("company.thebrowser.browser", "Arc"),
+            ("com.vivaldi.vivaldi", "Vivaldi"), ("com.operasoftware.opera", "Opera"),
+            ("org.mozilla.firefox", "Firefox"), ("com.apple.safari", "Safari"), ("com.apple.webkit", "Safari"),
+        ]
+        for (prefix, name) in browsers where b.hasPrefix(prefix) { return .browser(name) }
+        return nil
+    }
+
+    static func platform(forURL url: String) -> MeetingPlatform? {
+        let u = url.lowercased()
+        if u.range(of: #"meet\.google\.com/[a-z]{3,4}-[a-z]{3,4}-[a-z]{3,4}"#, options: .regularExpression) != nil { return .meet }
+        if u.contains("teams.microsoft.com") || u.contains("teams.live.com") || u.contains("teams.cloud.microsoft") { return .teams }
+        if u.contains("zoom.us/wc") || u.contains("app.zoom.us") { return .zoom }
+        return nil
+    }
+
+    static func platform(forTitle title: String) -> MeetingPlatform? {
+        let t = title.lowercased()
+        if t.hasPrefix("meet - ") || t.hasPrefix("meet – ") || t.contains("google meet") || t.contains("meet.google.com") { return .meet }
+        if t.contains("microsoft teams") { return .teams }
+        if t.contains("zoom meeting") || t.contains("zoom workplace") || t.contains("zoom webinar") { return .zoom }
+        return nil
+    }
+}
+
 /// Finds Zoom / Google Meet / Microsoft Teams join links in calendar text.
 enum MeetingLinks {
     static let patterns: [(MeetingPlatform, String)] = [

@@ -545,6 +545,26 @@ struct MeetingsPane: View {
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
             }
 
+            GroupBox("Record every live call automatically") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("When a Teams, Zoom or Google Meet call starts, record and transcribe it", isOn: $store.prefs.autoRecordCalls)
+                    HStack(spacing: 18) {
+                        Toggle("Microsoft Teams", isOn: $store.prefs.recordTeamsCalls)
+                        Toggle("Zoom", isOn: $store.prefs.recordZoomCalls)
+                        Toggle("Google Meet", isOn: $store.prefs.recordMeetCalls)
+                    }
+                    .disabled(!store.prefs.autoRecordCalls)
+                    Text("Works for calls you join, answer or start, in the Teams and Zoom apps or in Chrome, Edge, Safari, Brave or Arc. Recording starts a few seconds after the call uses your microphone and stops when the call ends; the transcript is saved (and sent to CollectivIQ if that's on). To record the other people too, allow **Screen Recording** on the Home page.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if let c = CallWatcher.shared.activeCall {
+                        Label("Recording: \(c.title) (\(c.platform.rawValue))", systemImage: "record.circle").foregroundStyle(.red)
+                    } else if !CallWatcher.shared.status.isEmpty {
+                        Text(CallWatcher.shared.status).font(.caption).foregroundStyle(.purple)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+
             GroupBox("2. Automatic joining") {
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle("Join my calendar calls automatically", isOn: $store.prefs.autoJoinEnabled)

@@ -180,6 +180,17 @@ public static class SelfTest
             return (cmp && u.Latest != null, $"current={Updater.Current} latest={u.Latest} status=\"{u.Status}\"");
         }, 60);
 
+        await Step("Live calls: detects Teams, Zoom and Meet; reads the microphone list", () =>
+        {
+            bool apps = CallApps.Kind(@"C:\Users\a\AppData\Local\Microsoft\WindowsApps\MSTeams_8wekyb3d8bbwe\ms-teams.exe") == MeetingPlatform.Teams
+                && CallApps.Kind(@"C:\Users\a\AppData\Roaming\Zoom\bin\Zoom.exe") == MeetingPlatform.Zoom
+                && CallApps.IsBrowser(@"C:\Program Files\Google\Chrome\Application\chrome.exe")
+                && CallApps.PlatformForTitle("Meet - abc-defg-hij - Google Chrome") == MeetingPlatform.Meet
+                && CallApps.PlatformForTitle("Inbox - Gmail - Google Chrome") == null;
+            var users = CallWatcher.MicUsers();   // must not throw without admin rights
+            return Task.FromResult((apps, $"micInUse={users.Count}"));
+        });
+
         await Step("Overlay and result card render", async () =>
         {
             var c = Controller.Shared;

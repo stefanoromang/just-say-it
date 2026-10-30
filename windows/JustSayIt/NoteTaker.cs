@@ -61,12 +61,19 @@ public sealed class NoteTaker
         if (IsRecording) _ = Stop(); else _ = Start();
     }
 
-    public Task Start() => Start(null);
+    /// What started the current recording.
+    public enum Origin { Manual, Calendar, Call }
+    public Origin CurrentOrigin { get; private set; } = Origin.Manual;
 
-    public async Task Start(UpcomingMeeting? m)
+    public Task Start() => Start(null, Origin.Manual);
+
+    public Task Start(UpcomingMeeting? m) => Start(m, m == null ? Origin.Manual : Origin.Calendar);
+
+    public async Task Start(UpcomingMeeting? m, Origin origin)
     {
         if (IsRecording) return;
         meeting = m;
+        CurrentOrigin = origin;
         var p = Store.Shared.Prefs;
         Lines.Clear();
         Set("Starting…");
