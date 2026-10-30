@@ -237,8 +237,10 @@ public sealed class MainWindow : Form
         var ciq = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
         var ciqOn = new CheckBox { Text = "After each recording, send my prompt + the transcript to CollectivIQ", Checked = store.Prefs.CiqEnabled, AutoSize = true };
         ciqOn.CheckedChanged += (_, _) => { store.Prefs.CiqEnabled = ciqOn.Checked; store.Save(); };
-        var prompt = new TextBox { Multiline = true, Width = 760, Height = 60, Text = store.Prefs.CiqPrompt };
-        prompt.Leave += (_, _) => { store.Prefs.CiqPrompt = prompt.Text; store.Save(); };
+        var prompt = new TextBox { Multiline = true, Width = 760, Height = 240, ScrollBars = ScrollBars.Vertical, Text = store.Prefs.CiqPrompt.Replace("\n", "\r\n") };
+        prompt.Leave += (_, _) => { store.Prefs.CiqPrompt = prompt.Text.Replace("\r\n", "\n"); store.Save(); };
+        var resetPrompt = new Button { Text = "Reset to the standard meeting prompt", AutoSize = true };
+        resetPrompt.Click += (_, _) => { store.Prefs.CiqPrompt = Prompts.CiqStandard; prompt.Text = Prompts.CiqStandard.Replace("\n", "\r\n"); store.Save(); };
         var signIn = new Button { Text = "Sign in to CollectivIQ", AutoSize = true };
         signIn.Click += (_, _) => CollectivIQ.OpenChat(signIn: true);
         var openCiq = new Button { Text = "Open CollectivIQ", AutoSize = true };
@@ -252,6 +254,7 @@ public sealed class MainWindow : Form
         ciq.Controls.Add(ciqOn);
         ciq.Controls.Add(L("Prompt", Small, Color.DimGray));
         ciq.Controls.Add(prompt);
+        ciq.Controls.Add(resetPrompt);
         ciq.Controls.Add(L("When a recording stops, the note is saved on this PC, then CollectivIQ opens in a Just Say It window, starts a new chat, pastes your prompt + the full transcript and presses Send. Sign in once in that window (tick Remember me); if you aren't signed in, the transcript is sent right after you sign in.", Small, Color.DimGray, 760));
         var ciqButtons = new FlowLayoutPanel { AutoSize = true };
         ciqButtons.Controls.AddRange(new Control[] { signIn, openCiq, sendLast });
@@ -521,7 +524,7 @@ public sealed class MainWindow : Form
 
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 1.7 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 1.8 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

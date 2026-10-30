@@ -149,7 +149,7 @@ struct Prefs: Codable {
     var checkForUpdates = true
     var skippedVersion: String?
     var ciqEnabled = false
-    var ciqPrompt = "Summarize this meeting: key points, decisions, action items with owners and dates, and open questions."
+    var ciqPrompt = ciqStandardPrompt
 
     init() {}
 
@@ -183,6 +183,9 @@ struct Prefs: Codable {
         skippedVersion = try? c.decode(String.self, forKey: .skippedVersion)
         ciqEnabled = (try? c.decode(Bool.self, forKey: .ciqEnabled)) ?? def.ciqEnabled
         ciqPrompt = (try? c.decode(String.self, forKey: .ciqPrompt)) ?? def.ciqPrompt
+        // Upgrade people still on the old short default to the standard meeting prompt.
+        let trimmed = ciqPrompt.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
+        if trimmed.isEmpty || trimmed == ciqOldDefaultPrompt.trimmingCharacters(in: CharacterSet(charactersIn: ".")) { ciqPrompt = ciqStandardPrompt }
     }
 }
 
@@ -204,6 +207,7 @@ final class Store: ObservableObject {
         let dec = JSONDecoder()
         prefs = (try? dec.decode(Prefs.self, from: Data(contentsOf: dir.appendingPathComponent("prefs.json")))) ?? Prefs()
         history = (try? dec.decode([HistoryItem].self, from: Data(contentsOf: dir.appendingPathComponent("history.json")))) ?? []
+        save() // write back any upgraded settings (e.g. the new CollectivIQ prompt)
     }
 
     func tone(for c: AppCategory) -> Tone { prefs.tones[c] ?? .professional }
@@ -223,3 +227,97 @@ final class Store: ObservableObject {
         if let d = try? JSONEncoder().encode(history) { try? d.write(to: historyURL, options: .atomic) }
     }
 }
+
+/// Placed before every note or transcript sent to CollectivIQ.
+let ciqStandardPrompt = """
+Instructions:
+
+Analyze the provided meeting transcript/recording/notes in full detail and produce a professional, structured summary using the exact format below. Preserve chronological flow (beginning → middle → end) and use direct quotes where impactful. Use bullet points throughout. Do not omit minor details — capture the full arc of the conversation.
+
+1. Meeting Metadata
+Date:
+Time (start–end):
+Duration:
+Location / Platform (in-person, Zoom, Teams, etc.):
+Meeting Purpose / Objective:
+
+2. Participants
+Attendees (full list, with roles/titles if known):
+Who called/organized the meeting:
+Who joined late or left early (if noted):
+Absent/expected-but-missing participants:
+
+3. Opening — How the Meeting Started
+Context or agenda set at the outset
+Any recap of previous meeting/action items referenced early on
+Initial tone/framing of the discussion
+
+4. Chronological Flow of Discussion (Beginning → Middle → End)
+Bullet-by-bullet walkthrough of how topics progressed
+Note transitions between subjects
+Flag any tense moments, disagreements, or pivots in direction
+
+5. Key Discussion Points
+Bullet list of each major topic raised
+Who raised each point
+Supporting context/data mentioned
+
+6. Decisions Made
+Bullet list of every concrete decision
+Who made/approved the decision
+Rationale given (if any)
+
+7. Open Questions / Unresolved Items
+Bullet list of questions raised but not answered
+Who owns finding the answer (if assigned)
+
+8. Risks Identified
+Bullet list of risks discussed
+Severity/impact if mentioned
+Who flagged the risk
+
+9. Blockers
+Bullet list of current blockers
+What/who is causing the blocker
+Dependencies involved
+
+10. Solutions Proposed
+Bullet list of solutions/ideas brought to the table
+Who proposed each
+Whether it was accepted, rejected, or left pending
+
+11. Issues Resolved During the Meeting
+Bullet list of problems that were actually solved/closed out in real time
+
+12. Timelines & Deadlines
+Bullet list of all dates, milestones, or deadlines mentioned
+Owner responsible for each
+
+13. Next Steps / Action Items
+Bullet list format: Action → Owner → Due Date
+
+14. Key Quotes
+Pull 3–6 of the most important or revealing direct quotes
+Attribute each to the speaker
+Note why the quote matters (decision-defining, risk-flagging, conflict, resolution, etc.)
+
+15. Closing — How the Meeting Ended
+Final summary/recap given (if any)
+Any last-minute decisions or action items added at the end
+Sentiment/tone at close (agreement, unresolved tension, enthusiasm, etc.)
+
+16. Overall Meeting Assessment
+Was the stated purpose achieved?
+What progress was made vs. what remains outstanding?
+Any recommendations for the next meeting's agenda?
+
+Formatting rules:
+Use nested bullet points, not paragraphs
+Bold key terms (decisions, owners, dates)
+Keep quotes exact and short, with speaker attribution
+Flag anything ambiguous as "unclear/unconfirmed" rather than guessing
+Paste your transcript or notes right after this prompt whenever you're ready, and I'll run the full breakdown for you IN PLAIN TEXT
+- HERE IS THE INFORMATION :
+"""
+
+let ciqOldDefaultPrompt = "Summarize this meeting: key points, decisions, action items with owners and dates, and open questions."

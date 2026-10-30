@@ -15,13 +15,14 @@ public static class CollectivIQ
 {
     public const string ChatUrl = "https://collectiviq.ai/chat";
     public const string LoginUrl = "https://collectiviq.ai/login";
-    public const string DefaultPrompt = "Summarize this meeting: key points, decisions, action items with owners and dates, and open questions.";
+    public const string DefaultPrompt = Prompts.CiqStandard;
 
     public static string Message(string prompt, string? title, string transcript)
     {
-        var s = string.IsNullOrWhiteSpace(prompt) ? DefaultPrompt : prompt.Trim();
-        if (!string.IsNullOrWhiteSpace(title)) s += $"\n\nMeeting: {title}";
-        return s + $"\n\nTranscript:\n{transcript}";
+        // The prompt ends with "HERE IS THE INFORMATION :" so the note follows right after it.
+        var s = (string.IsNullOrWhiteSpace(prompt) ? DefaultPrompt : prompt.Trim()) + "\n\n";
+        if (!string.IsNullOrWhiteSpace(title)) s += $"Meeting: {title}\n\n";
+        return s + transcript;
     }
 
     public static void Send(string? title, string transcript, bool force = false)

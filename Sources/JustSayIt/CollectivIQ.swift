@@ -14,14 +14,16 @@ enum CollectivIQ {
     static let chatURL = URL(string: "https://collectiviq.ai/chat")!
     static let loginURL = URL(string: "https://collectiviq.ai/login")!
 
-    static let defaultPrompt = "Summarize this meeting: key points, decisions, action items with owners and dates, and open questions."
+    static let defaultPrompt = ciqStandardPrompt
 
     /// The text sent to the chat: the prompt, then the transcript.
     static func message(prompt: String, title: String?, transcript: String) -> String {
         var s = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.isEmpty { s = defaultPrompt }
-        if let title, !title.isEmpty { s += "\n\nMeeting: \(title)" }
-        s += "\n\nTranscript:\n\(transcript)"
+        // The prompt ends with "HERE IS THE INFORMATION :" so the note follows right after it.
+        s += "\n\n"
+        if let title, !title.isEmpty { s += "Meeting: \(title)\n\n" }
+        s += transcript
         return s
     }
 

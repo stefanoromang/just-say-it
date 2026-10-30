@@ -74,8 +74,9 @@ var passed = 0
 
     // CollectivIQ message
     check("ciq message", CollectivIQ.message(prompt: " Recap this. ", title: "Weekly sync", transcript: "Me: hi"),
-          "Recap this.\n\nMeeting: Weekly sync\n\nTranscript:\nMe: hi")
-    check("ciq default prompt", CollectivIQ.message(prompt: "", title: nil, transcript: "x").hasPrefix(CollectivIQ.defaultPrompt))
+          "Recap this.\n\nMeeting: Weekly sync\n\nMe: hi")
+    check("ciq default prompt", CollectivIQ.message(prompt: "", title: nil, transcript: "x") == ciqStandardPrompt + "\n\nx")
+    check("ciq prompt ends with information marker", ciqStandardPrompt.hasSuffix("- HERE IS THE INFORMATION :"))
 
     print(failures == 0 ? "✓ All \(passed) Mac rule tests passed" : "\(failures) failed, \(passed) passed")
     exit(failures == 0 ? 0 : 1)

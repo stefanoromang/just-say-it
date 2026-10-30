@@ -2,6 +2,13 @@
 
 All notable changes to **Just Say It** (created by Stefano Roman Gunness).
 
+## 1.8 – 2026-10-29
+
+### CollectivIQ: standard meeting-analysis prompt (Mac and Windows)
+- Every note or transcript sent to CollectivIQ now starts with a detailed **16-section meeting analysis prompt**: metadata, participants, opening, chronological flow, key points, decisions, open questions, risks, blockers, solutions, resolved issues, timelines, action items (Action → Owner → Due Date), key quotes, closing and overall assessment, in plain text with nested bullets.
+- The transcript follows right after **"HERE IS THE INFORMATION :"**.
+- Anyone still on the old short default is switched automatically; custom prompts are kept. **Reset to the standard meeting prompt** restores it any time.
+
 ## 1.7 – 2026-10-29
 
 ### New: send recordings to CollectivIQ, inside the app (Mac and Windows)

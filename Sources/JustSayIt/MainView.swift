@@ -652,11 +652,11 @@ struct CollectivIQPane: View {
 
             GroupBox("3. Your prompt") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Sent before the transcript. Change it to anything you like.").font(.caption).foregroundStyle(.secondary)
+                    Text("Placed before every note or transcript sent to CollectivIQ. Change it to anything you like.").font(.caption).foregroundStyle(.secondary)
                     TextEditor(text: $store.prefs.ciqPrompt)
-                        .font(.body).frame(height: 80)
+                        .font(.callout).frame(height: 260)
                         .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
-                    Button("Reset to default") { store.prefs.ciqPrompt = CollectivIQ.defaultPrompt }
+                    Button("Reset to the standard meeting prompt") { store.prefs.ciqPrompt = CollectivIQ.defaultPrompt }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
             }
