@@ -234,6 +234,19 @@ public sealed class MainWindow : Form
         }
         page.Enter += (_, _) => Reload();
         list.DoubleClick += (_, _) => { if (list.SelectedItem is string n) Open(Path.Combine(NoteTaker.NotesDir, n)); };
+        var ciq = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+        var ciqOn = new CheckBox { Text = "After each recording, open CollectivIQ with my prompt + the transcript", Checked = store.Prefs.CiqEnabled, AutoSize = true };
+        ciqOn.CheckedChanged += (_, _) => { store.Prefs.CiqEnabled = ciqOn.Checked; store.Save(); };
+        var prompt = new TextBox { Multiline = true, Width = 760, Height = 60, Text = store.Prefs.CiqPrompt };
+        prompt.Leave += (_, _) => { store.Prefs.CiqPrompt = prompt.Text; store.Save(); };
+        var openCiq = new Button { Text = "Open CollectivIQ", AutoSize = true };
+        openCiq.Click += (_, _) => CollectivIQ.OpenChat();
+        ciq.Controls.Add(ciqOn);
+        ciq.Controls.Add(L("Prompt", Small, Color.DimGray));
+        ciq.Controls.Add(prompt);
+        ciq.Controls.Add(L("When a recording stops, the note is saved on this PC, then collectiviq.ai opens in your browser with the prompt and full transcript copied. Sign in there once (the browser remembers you), press Ctrl+V in the chat box, then Enter.", Small, Color.DimGray, 760));
+        ciq.Controls.Add(openCiq);
+        f.Controls.Add(Group("Send to CollectivIQ", ciq));
         f.Controls.Add(L("Saved notes (double-click to open)", H2));
         f.Controls.Add(list);
         page.Controls.Add(f);
@@ -498,7 +511,7 @@ public sealed class MainWindow : Form
 
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 1.6 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 1.7 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

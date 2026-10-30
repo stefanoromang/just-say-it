@@ -133,6 +133,7 @@ public sealed class NoteTaker
         WriteFile(summary);
         LastNotePath = filePath;
         Set("Saved to Documents › Just Say It Notes");
+        CollectivIQ.Send(meeting?.Title, TranscriptText(false));
     }
 
     void AddSource(string speaker, IWaveIn capture)

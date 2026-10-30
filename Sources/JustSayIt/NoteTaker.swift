@@ -138,6 +138,7 @@ final class NoteTaker: ObservableObject {
         lastNoteURL = fileURL
         refreshSaved()
         status = "Saved to Documents › Just Say It Notes"
+        CollectivIQ.send(title: meeting?.title, transcript: transcriptText(timestamps: false))
     }
 
     private func teardown() async {

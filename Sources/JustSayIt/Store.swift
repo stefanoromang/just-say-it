@@ -148,6 +148,8 @@ struct Prefs: Codable {
     var autoJoinExcludedCalendars: [String] = []
     var checkForUpdates = true
     var skippedVersion: String?
+    var ciqEnabled = false
+    var ciqPrompt = "Summarize this meeting: key points, decisions, action items with owners and dates, and open questions."
 
     init() {}
 
@@ -179,6 +181,8 @@ struct Prefs: Codable {
         autoJoinExcludedCalendars = (try? c.decode([String].self, forKey: .autoJoinExcludedCalendars)) ?? []
         checkForUpdates = (try? c.decode(Bool.self, forKey: .checkForUpdates)) ?? def.checkForUpdates
         skippedVersion = try? c.decode(String.self, forKey: .skippedVersion)
+        ciqEnabled = (try? c.decode(Bool.self, forKey: .ciqEnabled)) ?? def.ciqEnabled
+        ciqPrompt = (try? c.decode(String.self, forKey: .ciqPrompt)) ?? def.ciqPrompt
     }
 }
 

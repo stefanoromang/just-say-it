@@ -473,6 +473,24 @@ struct NotesPane: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
             }
+            GroupBox("Send to CollectivIQ") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("After each recording, open CollectivIQ with my prompt + the transcript", isOn: $store.prefs.ciqEnabled)
+                    Text("Prompt").font(.caption.bold())
+                    TextEditor(text: $store.prefs.ciqPrompt)
+                        .font(.body).frame(height: 60)
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
+                    Text("When a recording stops, the note is saved on this Mac, then collectiviq.ai opens in your browser with the prompt and full transcript copied. Sign in there once (the browser remembers you), press **⌘V** in the chat box, then **Return**.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Open CollectivIQ") { NSWorkspace.shared.open(CollectivIQ.chatURL) }
+                        if let u = n.lastNoteURL, let text = try? String(contentsOf: u, encoding: .utf8) {
+                            Button("Send last note now") { CollectivIQ.send(title: u.deletingPathExtension().lastPathComponent, transcript: text) }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
             Text("Saved notes").font(.headline)
             if n.saved.isEmpty {
                 Text("No notes yet.").foregroundStyle(.secondary)

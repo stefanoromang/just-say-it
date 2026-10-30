@@ -131,6 +131,8 @@ public class Prefs
     public List<CalendarFeed> CalendarFeeds { get; set; } = new();
     public bool CheckForUpdates { get; set; } = true;
     public string? SkippedVersion { get; set; }
+    public bool CiqEnabled { get; set; } = false;
+    public string CiqPrompt { get; set; } = "Summarize this meeting: key points, decisions, action items with owners and dates, and open questions.";
     public Dictionary<AppCategory, Tone> Tones { get; set; } = new()
     {
         [AppCategory.Email] = Tone.Professional, [AppCategory.Work] = Tone.Professional,

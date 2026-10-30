@@ -72,6 +72,11 @@ var passed = 0
     check("1.5 == 1.5.0", !Updater.isNewer("1.5.0", than: "1.5"))
     check("1.4 < 1.5", !Updater.isNewer("1.4", than: "1.5"))
 
+    // CollectivIQ message
+    check("ciq message", CollectivIQ.message(prompt: " Recap this. ", title: "Weekly sync", transcript: "Me: hi"),
+          "Recap this.\n\nMeeting: Weekly sync\n\nTranscript:\nMe: hi")
+    check("ciq default prompt", CollectivIQ.message(prompt: "", title: nil, transcript: "x").hasPrefix(CollectivIQ.defaultPrompt))
+
     print(failures == 0 ? "✓ All \(passed) Mac rule tests passed" : "\(failures) failed, \(passed) passed")
     exit(failures == 0 ? 0 : 1)
 }

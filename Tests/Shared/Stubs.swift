@@ -24,3 +24,15 @@ enum Updater {
         return false
     }
 }
+
+/// Same text layout as CollectivIQ.message (the real type opens the browser).
+enum CollectivIQ {
+    static let defaultPrompt = "Summarize this meeting: key points, decisions, action items with owners and dates, and open questions."
+    static func message(prompt: String, title: String?, transcript: String) -> String {
+        var s = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty { s = defaultPrompt }
+        if let title, !title.isEmpty { s += "\n\nMeeting: \(title)" }
+        s += "\n\nTranscript:\n\(transcript)"
+        return s
+    }
+}
