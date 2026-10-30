@@ -5,7 +5,7 @@ import AppKit
 import SwiftUI
 
 enum OverlayState: Equatable {
-    case hidden, listening(scribe: Bool, handsFree: Bool), thinking, done, error(String)
+    case hidden, listening(scribe: Bool, handsFree: Bool), thinking, done, error(String), noteTaker
 }
 
 @MainActor
@@ -25,6 +25,7 @@ final class OverlayModel: ObservableObject {
 
 struct OverlayView: View {
     @ObservedObject var model: OverlayModel
+    @ObservedObject var tick = Ticker.shared
 
     var body: some View {
         VStack(spacing: 6) {
@@ -60,6 +61,9 @@ struct OverlayView: View {
             ProgressView().controlSize(.small).tint(.white)
         case .done:
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case .noteTaker:
+            Circle().fill(Color(red: 1, green: 0.16, blue: 0.47)).frame(width: 10, height: 10)
+                .opacity(Ticker.shared.blink ? 1 : 0.25)
         case .error:
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
         case .hidden:
@@ -86,6 +90,9 @@ struct OverlayView: View {
             Text("Polishing…").font(.caption).foregroundStyle(.white)
         case .done:
             Text("Inserted").font(.caption).foregroundStyle(.white)
+        case .noteTaker:
+            Text("JustSayIt - Note taker is active").font(.caption.bold())
+                .foregroundStyle(Ticker.shared.blink ? Color(red: 1, green: 0.16, blue: 0.47) : .white)
         case .error(let m):
             Text(m).font(.caption).foregroundStyle(.white).lineLimit(1)
         case .hidden:
@@ -121,15 +128,26 @@ final class OverlayController {
         switch s {
         case .done: hide(after: 0.7)
         case .error: hide(after: 2.5)
-        case .hidden: panel.orderOut(nil)
+        case .hidden:
+            if NoteTaker.shared.isRecording { model.state = .noteTaker } else { panel.orderOut(nil) }
         default: break
         }
     }
 
     func hide(after: Double = 0) {
         let w = DispatchWorkItem { [weak self] in
-            self?.model.state = .hidden
-            self?.panel.orderOut(nil)
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                // While the Note Taker records, fall back to the flashing "active" pill.
+                if NoteTaker.shared.isRecording {
+                    self.model.state = .noteTaker
+                    self.position()
+                    self.panel.orderFrontRegardless()
+                } else {
+                    self.model.state = .hidden
+                    self.panel.orderOut(nil)
+                }
+            }
         }
         hideWork = w
         DispatchQueue.main.asyncAfter(deadline: .now() + after, execute: w)

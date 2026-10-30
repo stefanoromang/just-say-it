@@ -11,7 +11,7 @@ struct JustSayItApp: App {
         MenuBarExtra {
             MenuContent(c: c, store: store)
         } label: {
-            Image(systemName: "waveform.circle.fill")
+            StatusIconView()
         }
         Window("Just Say It", id: "main") {
             MainView(c: c, store: store)
@@ -37,6 +37,8 @@ struct MenuContent: View {
         Text("Hold \(store.prefs.hotkey.label) to talk")
         Text("Double-tap for hands-free · add ⇧ for Scribe")
         Text("Press Right ⇧ three times for the Note Taker")
+        Divider()
+        Text("Icon colors: cyan ready · pink dictating · purple Scribe · green Note Taker · orange working")
         Divider()
         Button("Start / Stop Dictation") { c.toggleFromMenu() }
         Button(NoteTaker.shared.isRecording ? "Stop Note Taker" : "Start Note Taker (Right ⇧ ×3)") { c.toggleNotes() }

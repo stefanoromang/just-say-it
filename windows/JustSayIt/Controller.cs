@@ -23,6 +23,8 @@ public sealed class Controller : IDisposable
 
     CaptureContext ctx = new();
     bool scribe;
+    public bool IsScribe => scribe;
+    public bool IsBusy => busy;
     DateTime startedAt;
     string lastRaw = "";
     bool busy;

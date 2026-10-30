@@ -5,7 +5,7 @@ using System.Drawing.Drawing2D;
 
 namespace JustSayIt;
 
-public enum OverlayState { Hidden, Listening, Thinking, Done, Error }
+public enum OverlayState { Hidden, Listening, Thinking, Done, Error, NoteTaker }
 
 /// Floating pill at the bottom of the screen while recording. Never steals focus.
 public sealed class Overlay : Form
@@ -16,6 +16,8 @@ public sealed class Overlay : Form
     string message = "";
     bool scribe, handsFree;
     readonly System.Windows.Forms.Timer hideTimer = new();
+    readonly System.Windows.Forms.Timer blinkTimer = new() { Interval = 600 };
+    bool blink;
 
     public Overlay()
     {
@@ -28,6 +30,8 @@ public sealed class Overlay : Form
         Size = new Size(560, 48);
         DoubleBuffered = true;
         hideTimer.Tick += (_, _) => { hideTimer.Stop(); HideNow(); };
+        blinkTimer.Tick += (_, _) => { if (state == OverlayState.NoteTaker) { blink = !blink; Invalidate(); } };
+        blinkTimer.Start();
     }
 
     protected override bool ShowWithoutActivation => true;
@@ -64,7 +68,12 @@ public sealed class Overlay : Form
         if (s == OverlayState.Error) { hideTimer.Interval = 2800; hideTimer.Start(); }
     }
 
-    void HideNow() { state = OverlayState.Hidden; Hide(); }
+    void HideNow()
+    {
+        // While the Note Taker records, fall back to the flashing "active" pill.
+        if (NoteTaker.Shared.IsRecording) { state = OverlayState.NoteTaker; Invalidate(); if (!Visible) Show(); return; }
+        state = OverlayState.Hidden; Hide();
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -76,6 +85,7 @@ public sealed class Overlay : Form
 
         string text = state switch
         {
+            OverlayState.NoteTaker => "JustSayIt - Note taker is active",
             OverlayState.Thinking => "Polishing…",
             OverlayState.Done => "Inserted",
             OverlayState.Error => message,
@@ -97,6 +107,7 @@ public sealed class Overlay : Form
         {
             OverlayState.Listening => scribe ? Color.MediumPurple : Color.IndianRed,
             OverlayState.Done => Color.MediumSeaGreen,
+            OverlayState.NoteTaker => blink ? Color.FromArgb(57, 255, 20) : Color.FromArgb(40, 57, 255, 20),
             OverlayState.Error => Color.Goldenrod,
             _ => Color.LightGray,
         };
@@ -129,8 +140,8 @@ public sealed class Overlay : Form
         }
         else
         {
-            using var white = new SolidBrush(Color.White);
-            g.DrawString(text, font, white, x, cy - 9);
+            using var fg = new SolidBrush(state == OverlayState.NoteTaker && blink ? Color.FromArgb(57, 255, 20) : Color.White);
+            g.DrawString(text, state == OverlayState.NoteTaker ? bold : font, fg, x, cy - 9);
         }
     }
 

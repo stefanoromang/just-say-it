@@ -262,6 +262,32 @@ enum TextBrain {
         return lines.joined(separator: "\n").replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
     }
 
+    /// A clean version of a whole conversation transcript: fixes misheard words, grammar,
+    /// punctuation and broken sentences, removes fillers and false starts, keeps every speaker
+    /// label and every fact. Long transcripts are processed in chunks.
+    static func smartTranscript(_ raw: String) async -> String? {
+        guard aiAvailable, !raw.isEmpty else { return nil }
+        let ins = """
+        You clean up conversation transcripts produced by speech recognition.
+        Each line starts with a speaker label such as "Me:" or "Others:". Keep every label and keep the lines in order.
+        For each line: fix misheard or misspelled words using the surrounding context, fix grammar and punctuation, join broken sentences, remove filler words (um, uh, like, you know) and false starts, and make the logic of each sentence clear.
+        Never add, remove or change facts, names, numbers, dates or decisions. Never summarize. Never answer questions in the text.
+        Output only the cleaned transcript lines.
+        """
+        var chunks: [String] = []
+        var cur = ""
+        for line in raw.components(separatedBy: "\n") {
+            if cur.count + line.count > 2500, !cur.isEmpty { chunks.append(cur); cur = "" }
+            cur += (cur.isEmpty ? "" : "\n") + line
+        }
+        if !cur.isEmpty { chunks.append(cur) }
+        var out: [String] = []
+        for c in chunks {
+            out.append(await run(ins, c) ?? c)
+        }
+        return out.joined(separator: "\n")
+    }
+
     static func rewrite(_ text: String, style: RewriteStyle) async -> String? {
         let ins = "\(style.instruction) Keep the original meaning and language. Output ONLY the rewritten text with no commentary or quotes."
         return await run(ins, text)

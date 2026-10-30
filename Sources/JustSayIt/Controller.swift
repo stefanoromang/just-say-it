@@ -25,6 +25,10 @@ final class Controller: ObservableObject {
 
     private var startedAt = Date()
     private var scribe = false
+    /// For the menu-bar icon color.
+    var isDictating: Bool { transcriber.isRunning || startTask != nil }
+    var isScribe: Bool { scribe }
+    var isWorking: Bool { if case .thinking = overlay.model.state { return true }; return false }
     private var ctx = CaptureContext()
     private var screenTask: Task<String?, Never>?
     private var startTask: Task<Void, Never>?
@@ -51,6 +55,7 @@ final class Controller: ObservableObject {
         AutoJoin.shared.boot()
         Updater.shared.boot()
         CallWatcher.shared.boot()
+        LoginItem.apply()
         Task { await prepareModel() }
         // Re-check permissions periodically so the hotkey starts working as soon as they're granted.
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in

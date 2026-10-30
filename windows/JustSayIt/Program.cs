@@ -8,6 +8,7 @@ namespace JustSayIt;
 static class Program
 {
     public static Icon AppIcon = SystemIcons.Application;
+    public static NotifyIcon? Tray;
     static Mutex? single;
 
     [STAThread]
@@ -62,6 +63,7 @@ static class Program
 sealed class TrayApp : ApplicationContext
 {
     readonly NotifyIcon tray = new();
+    TrayIcons? icons;
     MainWindow? window;
     readonly Controller c = Controller.Shared;
 
@@ -75,6 +77,8 @@ sealed class TrayApp : ApplicationContext
         Program.SetStartWithWindows(Store.Shared.Prefs.StartWithWindows);
 
         tray.Icon = Program.AppIcon;
+        Program.Tray = tray;
+        icons = new TrayIcons(tray);
         tray.Text = "Just Say It";
         tray.Visible = true;
         var menu = new ContextMenuStrip();
@@ -95,6 +99,7 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripMenuItem($"Hold {hk} to talk") { Enabled = false });
         menu.Items.Add(new ToolStripMenuItem("Double-tap for hands-free · add Shift for Scribe") { Enabled = false });
         menu.Items.Add(new ToolStripMenuItem("Right Shift ×3 for the Note Taker") { Enabled = false });
+        menu.Items.Add(new ToolStripMenuItem("Icon: cyan ready · pink dictating · purple Scribe · green Note Taker · orange working") { Enabled = false });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Start / Stop Dictation", null, (_, _) => c.ToggleFromMenu());
         menu.Items.Add(NoteTaker.Shared.IsRecording ? "Stop Note Taker" : "Start Note Taker (Right Shift ×3)", null, (_, _) => c.ToggleNotes());
@@ -123,7 +128,7 @@ sealed class TrayApp : ApplicationContext
             else MessageBox.Show(u.Status, "Just Say It", MessageBoxButtons.OK, MessageBoxIcon.Information);
         });
         menu.Items.Add("About Just Say It", null, (_, _) =>
-            MessageBox.Show("Just Say It 1.9\n\nAn original app designed and built by Stefano Roman Gunness.\nFree, private voice typing and meeting notes.\nTriple-tap Right Shift to start the Note Taker.\n\n© 2026 Stefano Roman Gunness · MIT License\nhttps://github.com/stefanoromang/just-say-it",
+            MessageBox.Show("Just Say It 2.0\n\nAn original app designed and built by Stefano Roman Gunness.\nFree, private voice typing and meeting notes.\nTriple-tap Right Shift to start the Note Taker.\n\n© 2026 Stefano Roman Gunness · MIT License\nhttps://github.com/stefanoromang/just-say-it",
                 "About Just Say It", MessageBoxButtons.OK, MessageBoxIcon.Information));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => ExitThread());

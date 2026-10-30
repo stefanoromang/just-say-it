@@ -34,7 +34,7 @@ jobs:
 
       - name: Portable zip
         shell: pwsh
-        run: Compress-Archive -Path windows/dist/JustSayIt/* -DestinationPath windows/dist/JustSayIt-1.9.0-win-x64-portable.zip
+        run: Compress-Archive -Path windows/dist/JustSayIt/* -DestinationPath windows/dist/JustSayIt-2.0.0-win-x64-portable.zip
 
       - uses: actions/upload-artifact@v5
         with:

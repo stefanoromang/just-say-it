@@ -148,6 +148,7 @@ struct Prefs: Codable {
     var autoJoinExcludedCalendars: [String] = []
     var checkForUpdates = true
     var skippedVersion: String?
+    var startAtLogin = true
     var autoRecordCalls = true
     var recordTeamsCalls = true
     var recordZoomCalls = true
@@ -185,6 +186,7 @@ struct Prefs: Codable {
         autoJoinExcludedCalendars = (try? c.decode([String].self, forKey: .autoJoinExcludedCalendars)) ?? []
         checkForUpdates = (try? c.decode(Bool.self, forKey: .checkForUpdates)) ?? def.checkForUpdates
         skippedVersion = try? c.decode(String.self, forKey: .skippedVersion)
+        startAtLogin = (try? c.decode(Bool.self, forKey: .startAtLogin)) ?? def.startAtLogin
         autoRecordCalls = (try? c.decode(Bool.self, forKey: .autoRecordCalls)) ?? def.autoRecordCalls
         recordTeamsCalls = (try? c.decode(Bool.self, forKey: .recordTeamsCalls)) ?? def.recordTeamsCalls
         recordZoomCalls = (try? c.decode(Bool.self, forKey: .recordZoomCalls)) ?? def.recordZoomCalls

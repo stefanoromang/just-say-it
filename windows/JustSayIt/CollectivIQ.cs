@@ -25,15 +25,57 @@ public static class CollectivIQ
         return s + transcript;
     }
 
+    public enum Choice { Raw, Smart, Both }
+
+    /// Called when a recording is saved: asks Raw / Smart / Both, then sends in the background.
+    public static void Deliver(string? title, string raw, string? smart)
+    {
+        var p = Store.Shared.Prefs;
+        if (!p.CiqEnabled || string.IsNullOrWhiteSpace(raw)) return;
+        Ui.Run(() =>
+        {
+            Choice? choice = smart == null ? Choice.Raw : Ask();
+            if (choice == null) return;
+            var msgs = new List<string>();
+            if (choice is Choice.Raw or Choice.Both) msgs.Add(Message(p.CiqPrompt, title == null ? null : title + " (raw transcript)", raw));
+            if (smart != null && choice is Choice.Smart or Choice.Both) msgs.Add(Message(p.CiqPrompt, title == null ? null : title + " (smart transcript)", smart));
+            CIQWindow.Shared.SendMessages(msgs);
+        });
+    }
+
+    /// For "Send my last note now" (no question asked).
     public static void Send(string? title, string transcript, bool force = false)
     {
         var p = Store.Shared.Prefs;
         if ((!p.CiqEnabled && !force) || string.IsNullOrWhiteSpace(transcript)) return;
         var text = Message(p.CiqPrompt, title, transcript);
-        Ui.Run(() => CIQWindow.Shared.SendMessage(text));
+        Ui.Run(() => CIQWindow.Shared.SendMessages(new List<string> { text }));
     }
 
+    static Choice? Ask()
+    {
+        using var f = new Form
+        {
+            Text = "Just Say It – CollectivIQ", FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterScreen,
+            TopMost = true, MinimizeBox = false, MaximizeBox = false, ClientSize = new Size(460, 170), Font = new Font("Segoe UI", 9.5f), Icon = Program.AppIcon,
+        };
+        var lbl = new Label
+        {
+            Text = "Send this recording to CollectivIQ?\n\nRaw: exactly as heard.\nSmart: words and logic fixed so it reads clearly.\nBoth: the raw transcript first, then the smart one.",
+            AutoSize = false, Bounds = new Rectangle(16, 12, 430, 100),
+        };
+        Choice? result = null;
+        Button B(string text, int x, Choice? c) { var b = new Button { Text = text, Bounds = new Rectangle(x, 120, 100, 32) }; b.Click += (_, _) => { result = c; f.Close(); }; return b; }
+        f.Controls.AddRange(new Control[] { lbl, B("Smart", 16, Choice.Smart), B("Raw", 124, Choice.Raw), B("Both", 232, Choice.Both), B("Don't send", 340, null) });
+        f.ShowDialog();
+        return result;
+    }
+
+    public static void Notify(string title, string body) =>
+        Ui.Run(() => Program.Tray?.ShowBalloonTip(5000, title, body, ToolTipIcon.Info));
+
     public static void OpenChat(bool signIn = false) => Ui.Run(() => CIQWindow.Shared.ShowAt(signIn ? LoginUrl : ChatUrl));
+
 
     /// Fills CollectivIQ's chat box and presses Send. Returns "login", "wait", "filled" or "sent".
     public static string Script(string msg) => """
@@ -58,7 +100,8 @@ public static class CollectivIQ
         """ + JsonSerializer.Serialize(msg) + ")";
 }
 
-/// The in-app CollectivIQ window (WebView2). Sign-in is kept in the user's profile folder.
+/// The in-app CollectivIQ window (WebView2). Works hidden in the background and is shown
+/// only when the person must sign in. Sign-in is kept in the user's profile folder.
 public sealed class CIQWindow : Form
 {
     static CIQWindow? shared;
@@ -67,80 +110,97 @@ public sealed class CIQWindow : Form
     readonly WebView2 web = new() { Dock = DockStyle.Fill };
     readonly System.Windows.Forms.Timer timer = new() { Interval = 1000 };
     Task? ready;
-    string? pending;
+    readonly Queue<string> queue = new();
     DateTime startedAt;
-    bool noticeShown;
+    DateTime? settleUntil;
+    int sent;
+    bool shownForLogin, background;
 
     CIQWindow()
     {
-        Text = "CollectivIQ – Just Say It";
+        Text = "Sign in to CollectivIQ – Just Say It";
         Icon = Program.AppIcon;
         ClientSize = new Size(1100, 780);
         StartPosition = FormStartPosition.CenterScreen;
+        ShowInTaskbar = false;
         Controls.Add(web);
         timer.Tick += async (_, _) => await Tick();
     }
 
+    // Created with a window handle but never shown unless sign-in is needed.
+    protected override void SetVisibleCore(bool value) => base.SetVisibleCore(background ? false : value);
+
     Task Ready()
     {
         if (ready != null) return ready;
+        _ = Handle;
         var dataDir = Path.Combine(Store.Dir, "CollectivIQ");
-        ready = Task.Run(async () =>
-        {
-            var env = await CoreWebView2Environment.CreateAsync(null, dataDir);
-            await Ui.Run(() => { });
-            return env;
-        }).ContinueWith(t => web.EnsureCoreWebView2Async(t.Result), TaskScheduler.FromCurrentSynchronizationContext()).Unwrap();
+        ready = CoreWebView2Environment.CreateAsync(null, dataDir).ContinueWith(t => web.EnsureCoreWebView2Async(t.Result),
+            TaskScheduler.FromCurrentSynchronizationContext()).Unwrap();
         return ready;
     }
 
+    /// Shows the window (sign-in, or opened from Settings).
     public async void ShowAt(string url)
     {
-        Show();
-        WindowState = FormWindowState.Normal;
-        Activate();
-        try
-        {
-            await Ready();
-            web.CoreWebView2.Navigate(url);
-        }
+        background = false;
+        ShowInTaskbar = true;
+        Show(); WindowState = FormWindowState.Normal; Activate();
+        try { await Ready(); web.CoreWebView2.Navigate(url); }
         catch (Exception e)
         {
-            MessageBox.Show("CollectivIQ couldn't open: " + e.Message + "\n\nWindows needs the Microsoft Edge WebView2 Runtime (already included in Windows 10/11 updates).",
+            MessageBox.Show("CollectivIQ couldn't open: " + e.Message + "\n\nWindows needs the Microsoft Edge WebView2 Runtime (included in Windows 10/11 updates).",
                 "Just Say It", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
-    public void SendMessage(string msg)
+    /// Sends the messages one after another in the background, each to a new chat.
+    public async void SendMessages(List<string> msgs)
     {
-        pending = msg;
-        startedAt = DateTime.Now;
-        noticeShown = false;
-        ShowAt(CollectivIQ.ChatUrl);
+        if (msgs.Count == 0) return;
+        foreach (var m in msgs) queue.Enqueue(m);
+        sent = 0; settleUntil = null; shownForLogin = false; startedAt = DateTime.Now;
+        if (!Visible) { background = true; ShowInTaskbar = false; }
+        CollectivIQ.Notify("JustSayIt – syncing with CollectivIQ", "Your notes are being synced and processed inside CollectivIQ.");
+        try { await Ready(); web.CoreWebView2.Navigate(CollectivIQ.ChatUrl); }
+        catch { CollectivIQ.Notify("JustSayIt – CollectivIQ", "CollectivIQ couldn't start (WebView2 Runtime missing?). Your notes are saved on this PC."); queue.Clear(); return; }
         timer.Start();
     }
 
     async Task Tick()
     {
-        if (pending == null || web.CoreWebView2 == null) { if (pending == null) timer.Stop(); return; }
-        if ((DateTime.Now - startedAt).TotalMinutes > 10)
+        if (web.CoreWebView2 == null) return;
+        if (settleUntil != null)
         {
-            timer.Stop(); pending = null;
-            Controller.Shared.Overlay.ShowState(OverlayState.Error, "CollectivIQ: timed out – the transcript is saved in your note");
+            if (DateTime.Now < settleUntil) return;
+            timer.Stop(); settleUntil = null;
+            Controller.Shared.Overlay.ShowState(OverlayState.Done);
+            CollectivIQ.Notify("JustSayIt – sent to CollectivIQ",
+                sent > 1 ? $"{sent} transcripts were sent. CollectivIQ is processing your notes." : "Your transcript was sent. CollectivIQ is processing your notes.");
+            return;
+        }
+        if (queue.Count == 0) { settleUntil = DateTime.Now.AddSeconds(10); return; }
+        if ((DateTime.Now - startedAt).TotalMinutes > 15)
+        {
+            timer.Stop(); queue.Clear();
+            CollectivIQ.Notify("JustSayIt – CollectivIQ", "CollectivIQ didn't respond. Your notes are saved on this PC.");
             return;
         }
         string result;
-        try { result = JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync(CollectivIQ.Script(pending))) ?? ""; }
+        try { result = JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync(CollectivIQ.Script(queue.Peek()))) ?? ""; }
         catch { return; }
         if (result == "sent")
         {
-            timer.Stop(); pending = null;
-            Controller.Shared.Overlay.ShowState(OverlayState.Done);
+            queue.Dequeue(); sent++;
+            if (shownForLogin) { shownForLogin = false; background = true; Hide(); }
+            if (queue.Count > 0) { web.CoreWebView2.Navigate(CollectivIQ.ChatUrl); startedAt = DateTime.Now; }
         }
-        else if (result == "login" && !noticeShown)
+        else if (result == "login" && !shownForLogin)
         {
-            noticeShown = true;
-            Controller.Shared.Overlay.ShowState(OverlayState.Error, "Sign in to CollectivIQ in the window – the transcript is sent right after");
+            shownForLogin = true;
+            background = false; ShowInTaskbar = true;
+            Show(); WindowState = FormWindowState.Normal; Activate();
+            CollectivIQ.Notify("Sign in to CollectivIQ", "Your session expired. Sign in once and your notes are sent automatically.");
         }
     }
 

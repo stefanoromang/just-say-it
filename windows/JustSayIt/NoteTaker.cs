@@ -22,6 +22,8 @@ public sealed class NoteTaker
     public string Status { get; private set; } = "";
     public string? LastNotePath { get; private set; }
     public readonly List<NoteLine> Lines = new();
+    /// Transcript rewritten for clarity (filled in when a recording stops).
+    public string? SmartTranscript { get; private set; }
     public event Action? Changed;
 
     public static string NotesDir
@@ -109,13 +111,15 @@ public sealed class NoteTaker
         Set(sources.Count > 1 ? "Recording you and computer audio" : "Recording your microphone");
         var title = meeting == null ? "Note" : string.Join("-", meeting.Title.Split(Path.GetInvalidFileNameChars())).Trim();
         if (title.Length > 60) title = title[..60];
-        var name = $"{DateTime.Now:yyyy-MM-dd HH.mm} {title}.md";
+        var name = $"{DateTime.Now:yyyy-MM-dd HH.mm} {title}.txt";
+        SmartTranscript = null;
         filePath = Path.Combine(NotesDir, name);
         WriteFile(null);
         cts = new CancellationTokenSource();
         var token = cts.Token;
         worker = Task.Run(() => Loop(token));
         if (p.PlaySounds) System.Media.SystemSounds.Asterisk.Play();
+        _ = Ui.Run(() => Controller.Shared.Overlay.ShowState(OverlayState.NoteTaker));
     }
 
     public async Task Stop()
@@ -123,6 +127,7 @@ public sealed class NoteTaker
         if (!IsRecording) return;
         IsRecording = false;
         Set("Finishing transcript…");
+        _ = Ui.Run(() => Controller.Shared.Overlay.ShowState(OverlayState.Hidden));
         StopCaptures();
         cts?.Cancel();
         if (worker != null) { try { await worker; } catch { } }
@@ -135,12 +140,15 @@ public sealed class NoteTaker
             if (filePath != null) try { File.Delete(filePath); } catch { }
             return;
         }
+        Set("Writing the smart transcript…");
+        SmartTranscript = await TextBrain.SmartTranscript(TranscriptText(false));
+        WriteFile(null);
         Set("Writing summary…");
         var summary = await Summarize();
         WriteFile(summary);
         LastNotePath = filePath;
         Set("Saved to Documents › Just Say It Notes");
-        CollectivIQ.Send(meeting?.Title, TranscriptText(false));
+        CollectivIQ.Deliver(meeting?.Title, TranscriptText(false), SmartTranscript);
     }
 
     void AddSource(string speaker, IWaveIn capture)
@@ -243,6 +251,12 @@ public sealed class NoteTaker
         Changed?.Invoke();
     }
 
+    /// Main note files, newest first (skips the separate Raw / Smart copies).
+    public static IEnumerable<string> SavedNotes() =>
+        Directory.GetFiles(NotesDir, "*.txt").Concat(Directory.GetFiles(NotesDir, "*.md"))
+            .Where(f => !f.EndsWith(" - Raw.txt") && !f.EndsWith(" - Smart.txt"))
+            .OrderByDescending(File.GetLastWriteTime);
+
     public static string Stamp(double t)
     {
         var s = (int)t;
@@ -256,18 +270,38 @@ public sealed class NoteTaker
                 Lines.Select(l => timestamps ? $"**{Stamp(l.Time)} {l.Speaker}:** {l.Text}" : $"{l.Speaker}: {l.Text}"));
     }
 
+    /// Plain-text note: header, summary, smart transcript and raw transcript.
+    /// Also writes "<name> - Raw.txt" and "<name> - Smart.txt" next to it.
     void WriteFile(string? summary)
     {
         if (filePath == null) return;
-        var md = new StringBuilder();
-        md.AppendLine(meeting != null ? $"# {meeting.Title}\n" : $"# Note – {StartedAt:dddd, MMMM d, yyyy h:mm tt}\n");
-        md.AppendLine($"*Recorded with Just Say It · {StartedAt:f} · {Stamp((DateTime.Now - StartedAt).TotalSeconds)} · {context}*\n");
-        if (meeting != null && meeting.Attendees.Count > 0) md.AppendLine("**Attendees:** " + string.Join(", ", meeting.Attendees) + "\n");
-        if (!string.IsNullOrWhiteSpace(summary)) md.AppendLine(summary.Trim() + "\n");
-        md.AppendLine("## Transcript\n");
-        md.AppendLine(TranscriptText());
-        try { File.WriteAllText(filePath, md.ToString()); } catch { }
+        var rule = new string('=', 60);
+        var header = new StringBuilder();
+        header.AppendLine(meeting != null ? meeting.Title : $"Note – {StartedAt:dddd, MMMM d, yyyy h:mm tt}");
+        header.AppendLine($"Recorded with Just Say It · {StartedAt:f} · {Stamp((DateTime.Now - StartedAt).TotalSeconds)} · {context}");
+        if (meeting != null && meeting.Attendees.Count > 0) header.AppendLine("Attendees: " + string.Join(", ", meeting.Attendees));
+        var raw = RawTranscript();
+
+        var txt = new StringBuilder(header.ToString()).AppendLine();
+        if (!string.IsNullOrWhiteSpace(summary)) txt.AppendLine(rule).AppendLine("SUMMARY").AppendLine(rule).AppendLine(Plain(summary)).AppendLine();
+        if (SmartTranscript != null) txt.AppendLine(rule).AppendLine("SMART TRANSCRIPT (words and logic fixed)").AppendLine(rule).AppendLine(SmartTranscript).AppendLine();
+        txt.AppendLine(rule).AppendLine("RAW TRANSCRIPT (exactly as heard)").AppendLine(rule).AppendLine(raw);
+        try { File.WriteAllText(filePath, txt.ToString()); } catch { }
+
+        var b = Path.Combine(Path.GetDirectoryName(filePath)!, Path.GetFileNameWithoutExtension(filePath));
+        try { File.WriteAllText(b + " - Raw.txt", header + "\nRAW TRANSCRIPT (exactly as heard)\n\n" + raw + "\n"); } catch { }
+        if (SmartTranscript != null)
+            try { File.WriteAllText(b + " - Smart.txt", header + "\nSMART TRANSCRIPT (words and logic fixed)\n\n" + SmartTranscript + "\n"); } catch { }
     }
+
+    /// Timestamped transcript exactly as recognised.
+    public string RawTranscript()
+    {
+        lock (linesGate) return string.Join("\n", Lines.Select(l => $"[{Stamp(l.Time)}] {l.Speaker}: {l.Text}"));
+    }
+
+    static string Plain(string md) => string.Join("\n", md.Replace("**", "").Split('\n').Select(l =>
+        l.StartsWith("## ") ? l[3..].ToUpperInvariant() : l.StartsWith("- [ ] ") ? "• " + l[6..] : l.StartsWith("- ") ? "• " + l[2..] : l)).Trim();
 
     async Task<string?> Summarize()
     {

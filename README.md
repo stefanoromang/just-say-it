@@ -116,14 +116,19 @@ Normal typing with Shift never triggers it: only three quick taps within about a
 
 ### While you record
 
-A small floating window shows the **live transcript**, a timer, and **Stop** and **Copy transcript** buttons. You can keep working in any app; the window stays on top and never takes focus.
+A small floating window shows the **live transcript**, a timer, and **Stop** and **Copy transcript** buttons, and a flashing **"JustSayIt - Note taker is active"** pill sits at the bottom of the screen. The menu-bar / tray icon turns **neon green**. You can keep working in any app.
 
 ### When you stop
 
 1. **The transcript is finished** and saved.
 2. **Meeting notes are written automatically:** Summary, Key points, Decisions and Action items (who → what → when). On Mac this uses Apple Intelligence; on Windows, the optional local Ollama model.
-3. **A Markdown file is saved** in **Documents › Just Say It Notes**, named with the date and the meeting title. It includes the date, duration, attendees (for calendar meetings), the notes and the full timestamped transcript. The file is updated **while you talk**, so nothing is lost if your computer restarts.
-4. **Optional:** the transcript is sent to **CollectivIQ** for a deeper analysis (see below).
+3. **Plain-text files are saved** in **Documents › Just Say It Notes**, named with the date and meeting title:
+   - `… .txt`: summary, smart transcript and raw transcript together
+   - `… - Raw.txt`: **exactly as heard**, with timestamps and speakers
+   - `… - Smart.txt`: **words and logic fixed** so it reads clearly (same speakers and facts)
+
+   The raw file is updated **while you talk**, so nothing is lost if your computer restarts.
+4. **Optional:** the transcript is sent to **CollectivIQ** (see below). You choose **Smart**, **Raw** or **Both** each time.
 
 All saved notes are listed on the **Note Taker** page, where you can open them or show them in Finder or Explorer.
 
@@ -133,7 +138,8 @@ After each recording, Just Say It can hand the transcript to **CollectivIQ**, in
 
 1. On the **CollectivIQ** page (Mac) or in the **Note Taker** tab (Windows), click **Sign in to CollectivIQ** and sign in once with your own account. Tick **Remember me**.
 2. Turn on **After each Note Taker recording, send my prompt + the transcript to CollectivIQ**.
-3. When a recording stops, Just Say It opens a new CollectivIQ chat, pastes the prompt and the full transcript, and presses **Send**.
+3. When a recording stops, choose **Smart**, **Raw** or **Both** (Both sends the raw transcript first, then the smart one). Just Say It sends it to a new CollectivIQ chat **in the background**. Nothing opens on screen unless you need to sign in again.
+4. A notification says your notes are **syncing and being processed inside CollectivIQ**, and another says when everything has been **sent**.
 
 The built-in prompt asks for a **16-section meeting analysis**: metadata, participants, how it started, the chronological flow, key points, decisions, open questions, risks, blockers, solutions, resolved issues, timelines, action items (Action → Owner → Due Date), key quotes, how it ended and an overall assessment. You can edit it, or click **Reset to the standard meeting prompt** to restore it. **Send my last note now** sends any saved note on demand.
 
@@ -175,7 +181,7 @@ Then turn on **Join my calendar calls automatically**. The first time you join a
 
 **No administrator password needed.** Just Say It installs and runs for your Windows account only, so it works on work PCs and normal (non-admin) accounts.
 
-**Easiest:** download **`JustSayIt-Setup-1.9.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
+**Easiest:** download **`JustSayIt-Setup-2.0.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
 
 **Or** open PowerShell and paste:
 
@@ -219,6 +225,25 @@ The one-line installer also switches to this mode by itself if the setup program
 
 You can change the hotkey (Right Alt, Right Ctrl, F8 or Scroll Lock), speech model, language and AI model in **Settings**.
 
+## The neon icon
+
+The menu-bar icon (Mac) and tray icon (Windows) change color so you always know what Just Say It is doing:
+
+| Color | Meaning | How |
+|---|---|---|
+| **Cyan** | Ready | — |
+| **Pink** | Dictating | Hold the dictation key (one key) |
+| **Purple** | Scribe | Shift + the dictation key (two keys) |
+| **Green** | Note Taker recording | Right Shift three times |
+| **Orange** | Working (polishing, sending) | — |
+
+Active modes pulse. The colors are bright neon so they stand out on light and dark mode.
+
+## Always running
+
+- **Mac:** Just Say It starts automatically when you log in. Change it in **Settings › Start Just Say It when I log in**.
+- **Windows:** it starts with Windows for your account, and is installed per user with no administrator password. Change it in **Settings › Start Just Say It with Windows**.
+
 ## Updates
 
 Just Say It checks for new versions automatically (when it starts and once a day) and offers to install them with one click. You can also use **Check for Updates…** in the menu bar / tray, or turn automatic checks off in **Settings › Updates**.
@@ -261,6 +286,9 @@ The Mac app is plain Swift / SwiftUI with no third-party dependencies:
 | `Sources/JustSayIt/NoteWindow.swift` | Live Note Taker window |
 | `Sources/JustSayIt/AutoJoin.swift` | Calendar watching, auto-join and automatic notes |
 | `Sources/JustSayIt/CallWatcher.swift` | Detects live Teams / Zoom / Meet calls and records them |
+| `Sources/JustSayIt/CIQSender.swift` | Sends transcripts to CollectivIQ in the background |
+| `Sources/JustSayIt/StatusIcon.swift` | Neon menu-bar icon that changes color by mode |
+| `Sources/JustSayIt/LoginItem.swift` | Starts the app when you log in |
 | `Sources/JustSayIt/MeetingLinks.swift` | Finds Zoom / Meet / Teams links in calendar events |
 | `Sources/JustSayIt/Updater.swift` | Checks GitHub for updates and installs them |
 
@@ -294,6 +322,7 @@ The Windows app is C# / WinForms, using [Whisper.net](https://github.com/sandroh
 | `windows/JustSayIt/NoteWindow.cs` | Live Note Taker window |
 | `windows/JustSayIt/AutoJoin.cs` | Calendar (ICS) reading, auto-join and automatic notes |
 | `windows/JustSayIt/CallWatcher.cs` | Detects live Teams / Zoom / Meet calls and records them |
+| `windows/JustSayIt/TrayIcons.cs` | Neon tray icon that changes color by mode |
 | `windows/JustSayIt/MeetingLinks.cs` | Finds Zoom / Meet / Teams links in calendar events |
 | `windows/JustSayIt/Updater.cs` | Checks GitHub for updates and installs them (per-user) |
 | `windows/JustSayIt/app.manifest` | Runs as the normal user (no admin prompt) |

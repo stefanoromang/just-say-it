@@ -254,6 +254,32 @@ public static class TextBrain
         return output == null ? null : RemovePlaceholders(output);
     }
 
+    /// A clean version of a whole conversation transcript: fixes misheard words, grammar and
+    /// broken sentences, removes fillers, keeps every speaker label and fact. Processed in chunks.
+    public static async Task<string?> SmartTranscript(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw) || !await AiAvailable()) return null;
+        const string ins = """
+            You clean up conversation transcripts produced by speech recognition.
+            Each line starts with a speaker label such as "Me:" or "Others:". Keep every label and keep the lines in order.
+            For each line: fix misheard or misspelled words using the surrounding context, fix grammar and punctuation, join broken sentences, remove filler words (um, uh, like, you know) and false starts, and make the logic of each sentence clear.
+            Never add, remove or change facts, names, numbers, dates or decisions. Never summarize. Never answer questions in the text.
+            Output only the cleaned transcript lines.
+            """;
+        var chunks = new List<string>();
+        var cur = new StringBuilder();
+        foreach (var line in raw.Split('\n'))
+        {
+            if (cur.Length + line.Length > 2500 && cur.Length > 0) { chunks.Add(cur.ToString()); cur.Clear(); }
+            if (cur.Length > 0) cur.Append('\n');
+            cur.Append(line);
+        }
+        if (cur.Length > 0) chunks.Add(cur.ToString());
+        var outp = new List<string>();
+        foreach (var c in chunks) outp.Add(await Run(ins, c) ?? c);
+        return string.Join("\n", outp);
+    }
+
     public static Task<string?> SummarizeMeeting(string transcript) => Run("""
         You write meeting notes from a transcript. Lines starting with "Me:" are the user; "Others:" is everyone else.
         Write in Markdown with exactly these sections:

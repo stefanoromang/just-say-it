@@ -48,6 +48,8 @@ final class NoteTaker: ObservableObject {
     private var fileURL: URL?
     private var context = ""
     private(set) var meeting: UpcomingMeeting?
+    /// Transcript rewritten for clarity (filled in when a recording stops).
+    private(set) var smartTranscript: String?
 
     /// What started the current recording.
     enum Origin { case manual, calendar, call }
@@ -124,6 +126,7 @@ final class NoteTaker: ObservableObject {
         status = sysCapture != nil ? "Recording you and computer audio" : "Recording your microphone"
         createFile()
         NoteWindow.shared.show()
+        Controller.shared.overlay.show(.noteTaker)
         if store.prefs.playSounds { NSSound(named: "Hero")?.play() }
     }
 
@@ -131,6 +134,7 @@ final class NoteTaker: ObservableObject {
         guard isRecording else { return }
         isRecording = false
         status = "Finishing transcript…"
+        Controller.shared.overlay.show(.hidden)
         await teardown()
         if Store.shared.prefs.playSounds { NSSound(named: "Bottle")?.play() }
 
@@ -140,13 +144,18 @@ final class NoteTaker: ObservableObject {
             fileURL = nil
             return
         }
+        status = "Writing the smart transcript…"
+        smartTranscript = await TextBrain.smartTranscript(transcriptText(timestamps: false))
+        writeFile(summary: nil)
         status = "Writing summary…"
         let summary = await summarize()
         writeFile(summary: summary)
         lastNoteURL = fileURL
         refreshSaved()
         status = "Saved to Documents › Just Say It Notes"
-        CollectivIQ.send(title: meeting?.title, transcript: transcriptText(timestamps: false))
+        CollectivIQ.deliver(title: meeting?.title,
+                            raw: transcriptText(timestamps: false),
+                            smart: smartTranscript)
     }
 
     private func teardown() async {
@@ -215,8 +224,9 @@ final class NoteTaker: ObservableObject {
             let safe = m.title.components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|")).joined(separator: "-")
             title = String(safe.prefix(60)).trimmingCharacters(in: .whitespaces)
         }
-        let name = "\(f.string(from: Date())) \(title).md"
-        fileURL = Self.notesDir.appendingPathComponent(name)
+        let base = "\(f.string(from: Date())) \(title)"
+        fileURL = Self.notesDir.appendingPathComponent(base + ".txt")
+        smartTranscript = nil
         writeFile(summary: nil)
     }
 
@@ -231,6 +241,8 @@ final class NoteTaker: ObservableObject {
         return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%02d:%02d", s / 60, s % 60)
     }
 
+    /// Plain-text note: header, summary, smart transcript and raw transcript.
+    /// Also writes "<name> - Raw.txt" and "<name> - Smart.txt" next to it.
     private func writeFile(summary: String?) {
         guard let url = fileURL else { return }
         let df = DateFormatter()
@@ -238,18 +250,49 @@ final class NoteTaker: ObservableObject {
         df.timeStyle = .short
         let start = startedAt ?? Date()
         let duration = Date().timeIntervalSince(start)
-        var md = meeting.map { "# \($0.title)\n\n" } ?? "# Note – \(df.string(from: start))\n\n"
-        md += "*Recorded with Just Say It · \(df.string(from: start)) · \(stamp(duration)) · \(context)*\n\n"
-        if let m = meeting, !m.attendees.isEmpty { md += "**Attendees:** " + m.attendees.joined(separator: ", ") + "\n\n" }
-        if let summary { md += summary.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n" }
-        md += "## Transcript\n\n" + transcriptText() + "\n"
-        try? md.write(to: url, atomically: true, encoding: .utf8)
+        let rule = String(repeating: "=", count: 60)
+        var header = (meeting?.title ?? "Note – \(df.string(from: start))") + "\n"
+        header += "Recorded with Just Say It · \(df.string(from: start)) · \(stamp(duration)) · \(context)\n"
+        if let m = meeting, !m.attendees.isEmpty { header += "Attendees: " + m.attendees.joined(separator: ", ") + "\n" }
+
+        var txt = header + "\n"
+        if let summary { txt += "\(rule)\nSUMMARY\n\(rule)\n" + Self.plain(summary) + "\n\n" }
+        if let smart = smartTranscript { txt += "\(rule)\nSMART TRANSCRIPT (words and logic fixed)\n\(rule)\n" + smart + "\n\n" }
+        txt += "\(rule)\nRAW TRANSCRIPT (exactly as heard)\n\(rule)\n" + rawTranscript() + "\n"
+        try? txt.write(to: url, atomically: true, encoding: .utf8)
+
+        let base = url.deletingPathExtension().path
+        try? (header + "\nRAW TRANSCRIPT (exactly as heard)\n\n" + rawTranscript() + "\n")
+            .write(toFile: base + " - Raw.txt", atomically: true, encoding: .utf8)
+        if let smart = smartTranscript {
+            try? (header + "\nSMART TRANSCRIPT (words and logic fixed)\n\n" + smart + "\n")
+                .write(toFile: base + " - Smart.txt", atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Timestamped transcript exactly as recognised.
+    func rawTranscript() -> String {
+        lines.map { "[\(stamp($0.time))] \($0.speaker): \($0.text)" }.joined(separator: "\n")
+    }
+
+    /// Removes Markdown symbols for the plain-text file.
+    nonisolated static func plain(_ md: String) -> String {
+        md.components(separatedBy: "\n").map { line -> String in
+            var l = line.replacingOccurrences(of: "**", with: "")
+            if l.hasPrefix("## ") { l = String(l.dropFirst(3)).uppercased() }
+            if l.hasPrefix("- [ ] ") { l = "• " + l.dropFirst(6) }
+            else if l.hasPrefix("- ") { l = "• " + l.dropFirst(2) }
+            return l
+        }.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func refreshSaved() {
         let fm = FileManager.default
         let urls = (try? fm.contentsOfDirectory(at: Self.notesDir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-        saved = urls.filter { $0.pathExtension == "md" }.map { u in
+        saved = urls.filter {
+            ($0.pathExtension == "txt" || $0.pathExtension == "md")
+                && !$0.lastPathComponent.hasSuffix(" - Raw.txt") && !$0.lastPathComponent.hasSuffix(" - Smart.txt")
+        }.map { u in
             let d = (try? u.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
             return SavedNote(url: u, title: u.deletingPathExtension().lastPathComponent, date: d)
         }.sorted { $0.date > $1.date }

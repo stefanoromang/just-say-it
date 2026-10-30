@@ -246,7 +246,7 @@ public sealed class MainWindow : Form
         void Reload()
         {
             list.Items.Clear();
-            foreach (var file in Directory.GetFiles(NoteTaker.NotesDir, "*.md").OrderByDescending(File.GetLastWriteTime))
+            foreach (var file in NoteTaker.SavedNotes())
                 list.Items.Add(Path.GetFileName(file));
         }
         page.Enter += (_, _) => Reload();
@@ -265,7 +265,7 @@ public sealed class MainWindow : Form
         var sendLast = new Button { Text = "Send my last note now", AutoSize = true };
         sendLast.Click += (_, _) =>
         {
-            var last = Directory.GetFiles(NoteTaker.NotesDir, "*.md").OrderByDescending(File.GetLastWriteTime).FirstOrDefault();
+            var last = NoteTaker.SavedNotes().FirstOrDefault();
             if (last != null) CollectivIQ.Send(Path.GetFileNameWithoutExtension(last), File.ReadAllText(last), force: true);
         };
         ciq.Controls.Add(ciqOn);
@@ -541,7 +541,7 @@ public sealed class MainWindow : Form
 
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 1.9 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 2.0 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

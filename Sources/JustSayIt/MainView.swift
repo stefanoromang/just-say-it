@@ -422,6 +422,9 @@ struct SettingsPane: View {
             Toggle("Use what's on screen as context (needs Screen Recording)", isOn: $store.prefs.useScreenContext)
             Toggle("Note Taker: Right ⇧ Shift × 3 starts/stops it", isOn: $store.prefs.noteTakerEnabled)
             Toggle("Note Taker: also record computer audio (the other people on a call)", isOn: $store.prefs.noteCaptureSystemAudio)
+            Toggle("Start Just Say It when I log in to my Mac", isOn: Binding(
+                get: { store.prefs.startAtLogin },
+                set: { store.prefs.startAtLogin = $0; LoginItem.set($0) }))
             Toggle("Play start/stop sounds", isOn: $store.prefs.playSounds)
             Toggle("Restore my clipboard after inserting", isOn: $store.prefs.restoreClipboard)
             Text(c.modelStatus).font(.caption).foregroundStyle(.secondary)

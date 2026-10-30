@@ -2,6 +2,25 @@
 
 All notable changes to **Just Say It**, an original app designed and built by **Stefano Roman Gunness**.
 
+## 2.0 – 2026-10-30
+
+### Notes: plain text, raw and smart transcripts
+- Notes are now saved as **.txt** files. Each recording creates:
+  - `<date> <title>.txt` – summary, **smart transcript** and **raw transcript** in one file
+  - `<date> <title> - Raw.txt` – exactly as heard, with timestamps
+  - `<date> <title> - Smart.txt` – misheard words, grammar and logic fixed so it reads clearly (same speakers and facts)
+
+### CollectivIQ, fully in the background
+- When a recording ends you choose **Smart**, **Raw** or **Both** (Both sends the raw transcript first, then the smart one).
+- Sending happens **invisibly in the background**; the CollectivIQ window appears **only if you need to sign in again**.
+- Notifications: **"syncing… your notes are being processed inside CollectivIQ"** when it starts, and **"sent to CollectivIQ"** about 10 seconds after the last message is posted.
+
+### Always running, easy to see
+- **Mac:** starts automatically when you log in (Settings › Start Just Say It when I log in). **Windows:** already starts with Windows, installed per user with no admin password.
+- **Neon menu-bar / tray icon** that changes color with what you're doing: **cyan** ready · **pink** dictating (1 key) · **purple** Scribe (2 keys) · **green** Note Taker (Right Shift ×3) · **orange** working. Active modes pulse. Bright on both light and dark mode.
+- **Flashing "JustSayIt - Note taker is active"** pill while the Note Taker records.
+- **New app icon:** a glowing neon waveform.
+
 ## 1.9 – 2026-10-30
 
 ### New: record every live call automatically (Mac and Windows)
