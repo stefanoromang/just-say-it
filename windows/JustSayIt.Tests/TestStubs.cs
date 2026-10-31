@@ -12,3 +12,11 @@ public class CaptureContext
 
 /// Stand-in for the Windows-only local AI types used by Store.
 public enum LocalModel { Fast, Quality }
+
+/// Stand-in for the built-in local AI (not used by the text-rule tests).
+public static class LocalAI
+{
+    public static bool Ready => false;
+    public static Task<string?> Run(string instructions, string prompt, int maxTokens = 1500) => Task.FromResult<string?>(null);
+    public static Task Prewarm() => Task.CompletedTask;
+}
