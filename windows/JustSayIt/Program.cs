@@ -14,6 +14,21 @@ static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--download-models")
+        {
+            // Run by the installer: fetch the speech model and the built-in local AI, then exit.
+            try
+            {
+                Task.Run(async () =>
+                {
+                    await Transcriber.EnsureModel(Store.Shared.Prefs.Model);
+                    await LocalAI.EnsureModel(Store.Shared.Prefs.LocalModel);
+                }).Wait(TimeSpan.FromMinutes(60));
+            }
+            catch { /* the app finishes any interrupted download on first launch */ }
+            return;
+        }
+
         if (args.Length > 0 && args[0] == "--selftest")
         {
             ApplicationConfiguration.Initialize();
@@ -128,7 +143,7 @@ sealed class TrayApp : ApplicationContext
             else MessageBox.Show(u.Status, "Just Say It", MessageBoxButtons.OK, MessageBoxIcon.Information);
         });
         menu.Items.Add("About Just Say It", null, (_, _) =>
-            MessageBox.Show("Just Say It 2.1\n\nAn original app designed and built by Stefano Roman Gunness.\nFree, private voice typing and meeting notes.\nTriple-tap Right Shift to start the Note Taker.\n\n© 2026 Stefano Roman Gunness · MIT License\nhttps://github.com/stefanoromang/just-say-it",
+            MessageBox.Show("Just Say It 2.2\n\nAn original app designed and built by Stefano Roman Gunness.\nFree, private voice typing and meeting notes.\nTriple-tap Right Shift to start the Note Taker.\n\n© 2026 Stefano Roman Gunness · MIT License\nhttps://github.com/stefanoromang/just-say-it",
                 "About Just Say It", MessageBoxButtons.OK, MessageBoxIcon.Information));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => ExitThread());

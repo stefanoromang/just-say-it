@@ -3,7 +3,7 @@
 ; https://github.com/stefanoromang/just-say-it
 
 #define AppName "Just Say It"
-#define AppVersion "2.1.0"
+#define AppVersion "2.2.0"
 #define AppPublisher "Stefano Roman Gunness"
 #define AppURL "https://github.com/stefanoromang/just-say-it"
 #define AppExe "JustSayIt.exe"
@@ -45,6 +45,7 @@ RestartApplications=no
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
+Name: "localai"; Description: "Download the built-in local AI now (1.1 GB, recommended – smart cleanup, Scribe, smart transcripts and summaries work offline)"; GroupDescription: "Local AI:"
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Shortcuts:"
 Name: "startup"; Description: "Start Just Say It when Windows starts"; GroupDescription: "Startup:"
 
@@ -59,6 +60,7 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "JustSayIt"; ValueData: """{app}\{#AppExe}"" --background"; Flags: uninsdeletevalue; Tasks: startup
 
 [Run]
+Filename: "{app}\{#AppExe}"; Parameters: "--download-models"; StatusMsg: "Downloading the speech model and the built-in local AI (one time)…"; Flags: waituntilterminated runhidden; Tasks: localai
 Filename: "{app}\{#AppExe}"; Description: "Launch Just Say It"; Flags: nowait postinstall skipifsilent
 ; Updates started from inside the app (with /RELAUNCH) restart it when they finish.
 Filename: "{app}\{#AppExe}"; Parameters: "--background"; Flags: nowait; Check: ShouldRelaunch

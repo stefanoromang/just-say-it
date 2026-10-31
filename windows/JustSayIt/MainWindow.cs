@@ -81,8 +81,8 @@ public sealed class MainWindow : Form
         var setup = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
         modelLabel = L("", null, null, 760);
         aiLabel = L("", null, null, 760);
-        var aiBtn = new Button { Text = "Get the free local AI (Ollama)", AutoSize = true };
-        aiBtn.Click += (_, _) => Open("https://ollama.com/download/windows");
+        var aiBtn = new Button { Text = "Download the built-in local AI now", AutoSize = true };
+        aiBtn.Click += async (_, _) => { aiBtn.Enabled = false; await c.PrepareLocalAI(); aiBtn.Enabled = true; };
         setup.Controls.Add(modelLabel);
         setup.Controls.Add(aiLabel);
         setup.Controls.Add(aiBtn);
@@ -116,9 +116,10 @@ public sealed class MainWindow : Form
         if (modelLabel != null) modelLabel.Text = (c.ModelReady ? "✅ " : "⏳ ") + c.ModelStatus;
         var ai = await TextBrain.AiAvailable();
         if (aiLabel != null)
-            aiLabel.Text = ai
-                ? $"✅ Smart AI cleanup, Scribe and Rewrite ready (Ollama · {store.Prefs.OllamaModel})"
-                : $"⚠️ Smart AI is optional. Install Ollama, then run:  ollama pull {store.Prefs.OllamaModel}   (basic cleanup works without it)";
+            aiLabel.Text = LocalAI.Ready
+                ? $"✅ Built-in local AI ready ({LocalAI.Info(store.Prefs.LocalModel).Label}): smart cleanup, Scribe, Rewrite, smart transcripts and summaries"
+                : ai ? $"✅ Smart AI ready (Ollama · {store.Prefs.OllamaModel})"
+                : "⏳ " + (string.IsNullOrEmpty(LocalAI.Status) ? "The built-in local AI downloads automatically on first launch (one time). Basic cleanup works meanwhile." : LocalAI.Status);
         var p = store.Prefs;
         int wpm = p.TotalSeconds > 5 ? (int)(p.TotalWords / (p.TotalSeconds / 60)) : 0;
         if (statsLabel != null) statsLabel.Text = $"{p.TotalWords} words dictated   ·   {(wpm > 0 ? wpm.ToString() : "–")} words/min   ·   {p.TotalWords / 40} min saved vs typing";
@@ -504,12 +505,18 @@ public sealed class MainWindow : Form
         lang.SelectedIndexChanged += (_, _) => { p.Language = langs[lang.SelectedIndex].code; store.Save(); };
         Row("Language", lang);
 
+        var localModel = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 360 };
+        foreach (LocalModel m in Enum.GetValues<LocalModel>()) localModel.Items.Add(LocalAI.Info(m).Label);
+        localModel.SelectedIndex = (int)p.LocalModel;
+        localModel.SelectedIndexChanged += async (_, _) => { p.LocalModel = (LocalModel)localModel.SelectedIndex; store.Save(); await c.PrepareLocalAI(); };
+        Row("Built-in local AI", localModel);
+
         var url = new TextBox { Width = 300, Text = p.OllamaUrl };
         url.Leave += (_, _) => { p.OllamaUrl = url.Text.Trim(); store.Save(); TextBrain.ResetAiCheck(); };
-        Row("Local AI address (Ollama)", url);
+        Row("Optional: Ollama address", url);
         var llm = new TextBox { Width = 300, Text = p.OllamaModel };
         llm.Leave += (_, _) => { p.OllamaModel = llm.Text.Trim(); store.Save(); TextBrain.ResetAiCheck(); _ = TextBrain.Prewarm(); };
-        Row("Local AI model", llm);
+        Row("Optional: Ollama model", llm);
 
         CheckBox Check(string text, bool value, Action<bool> set)
         {
@@ -554,7 +561,7 @@ public sealed class MainWindow : Form
 
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 2.1 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 2.2 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

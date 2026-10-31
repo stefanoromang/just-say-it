@@ -50,7 +50,7 @@ public sealed class Controller : IDisposable
         };
 
         _ = PrepareModel();
-        _ = TextBrain.Prewarm();
+        _ = PrepareLocalAI();
         AutoJoin.Shared.Boot();
         ContextReader.WarmUp();
         Updater.Shared.Boot();
@@ -71,6 +71,19 @@ public sealed class Controller : IDisposable
         {
             ModelStatus = "Speech model download failed: " + e.Message;
         }
+        StatusChanged?.Invoke();
+    }
+
+    /// Downloads the built-in local AI model once (in the background), then loads it.
+    public async Task PrepareLocalAI()
+    {
+        try
+        {
+            await LocalAI.EnsureModel(store.Prefs.LocalModel);
+            TextBrain.ResetAiCheck();
+            await TextBrain.Prewarm();
+        }
+        catch { /* falls back to Ollama if installed; basic cleanup always works */ }
         StatusChanged?.Invoke();
     }
 

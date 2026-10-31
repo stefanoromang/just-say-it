@@ -20,7 +20,7 @@
     <Authors>Stefano Roman Gunness</Authors>
     <Copyright>© 2026 Stefano Roman Gunness. MIT License.</Copyright>
     <Description>Free, private voice typing for Windows.</Description>
-    <Version>2.1.0</Version>
+    <Version>2.2.0</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>
@@ -31,6 +31,8 @@
     <PackageReference Include="Ical.Net" Version="5.2.3" />
     <PackageReference Include="NAudio.WinMM" Version="3.3.0" />
     <PackageReference Include="NAudio.Wasapi" Version="3.3.0" />
+    <PackageReference Include="LLamaSharp" Version="0.30.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.30.0" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <PackageReference Include="System.Speech" Version="10.0.14" />
     <PackageReference Include="Whisper.net" Version="1.9.1" />

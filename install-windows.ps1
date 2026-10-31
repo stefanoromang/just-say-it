@@ -79,7 +79,7 @@ if ($Portable -or -not $setup) {
     Write-Host "Installing..."
     try {
         # /CURRENTUSER forces a per-user install; it never shows an administrator prompt.
-        $p = Start-Process -FilePath $out -ArgumentList "/SILENT", "/CURRENTUSER", "/TASKS=desktopicon,startup" -PassThru
+        $p = Start-Process -FilePath $out -ArgumentList "/SILENT", "/CURRENTUSER", "/TASKS=localai,desktopicon,startup" -PassThru
         $p.WaitForExit()
         $ok = ($p.ExitCode -eq 0) -and (Test-Path $exe)
     } catch { $ok = $false }
@@ -94,12 +94,9 @@ if (Test-Path $exe) {
     Start-Process $exe
     Write-Host ""
     Write-Host "Done! Just Say It is installed in $appDir and running (look for its icon in the system tray)." -ForegroundColor Green
-    Write-Host "The first launch downloads the speech model (~470 MB) once."
+    Write-Host "The speech model and the built-in local AI download once (about 1.6 GB total) and then work offline."
     Write-Host "Click into any text box, hold Right Alt, talk, and let go."
-    Write-Host ""
-    Write-Host "Optional - smarter cleanup, Scribe and Rewrite with a free local AI:"
-    Write-Host "  1. Install Ollama: https://ollama.com/download/windows (also installs per-user, no admin)"
-    Write-Host "  2. Run:  ollama pull llama3.2:3b"
+
 } else {
     Write-Host "Installation did not complete. Download it manually: https://github.com/$repo/releases" -ForegroundColor Yellow
 }

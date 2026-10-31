@@ -191,6 +191,18 @@ public static class SelfTest
             return Task.FromResult((apps, $"micInUse={users.Count}"));
         });
 
+        await Step("Built-in local AI: download, load and clean up text", async () =>
+        {
+            await LocalAI.EnsureModel(LocalModel.Fast);
+            var timer = Stopwatch.StartNew();
+            var outp = await LocalAI.Run(
+                "You are a dictation formatter. Remove filler words and self-corrections, fix punctuation. Output only the cleaned text.",
+                "um so I think we should uh meet on tuesday no wait wednesday at like 3pm", 120);
+            var t = (outp ?? "").ToLowerInvariant();
+            bool ok = t.Contains("wednesday") && !t.Contains(" um ") && !t.StartsWith("um");
+            return (ok, $"\"{outp}\" ({timer.ElapsedMilliseconds} ms, model {new FileInfo(LocalAI.ModelPath(LocalModel.Fast)).Length / 1_048_576} MB)");
+        }, 900);
+
         await Step("Overlay and result card render", async () =>
         {
             var c = Controller.Shared;

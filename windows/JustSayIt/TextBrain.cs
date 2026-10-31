@@ -138,6 +138,7 @@ public static class TextBrain
 
     public static async Task<bool> AiAvailable()
     {
+        if (LocalAI.Ready) return true;
         if ((DateTime.Now - lastCheck).TotalSeconds < 20) return lastAvailable;
         lastCheck = DateTime.Now;
         try
@@ -156,6 +157,16 @@ public static class TextBrain
     public static void ResetAiCheck() => lastCheck = DateTime.MinValue;
 
     static async Task<string?> Run(string instructions, string prompt)
+    {
+        if (LocalAI.Ready)
+        {
+            var local = await LocalAI.Run(instructions, prompt);
+            if (local != null) return StripWrapping(local);
+        }
+        return await RunOllama(instructions, prompt);
+    }
+
+    static async Task<string?> RunOllama(string instructions, string prompt)
     {
         if (!await AiAvailable()) return null;
         var p = Store.Shared.Prefs;
@@ -185,6 +196,7 @@ public static class TextBrain
     /// Loads the model into memory so the first dictation is fast.
     public static async Task Prewarm()
     {
+        if (LocalAI.Ready) { await LocalAI.Prewarm(); return; }
         if (!await AiAvailable()) return;
         var p = Store.Shared.Prefs;
         try { await Http.PostAsJsonAsync(p.OllamaUrl.TrimEnd('/') + "/api/generate", new { model = p.OllamaModel, keep_alive = "30m" }); } catch { }

@@ -54,7 +54,7 @@ I wanted one tool that does two things well: lets me *write by talking* anywhere
 | System | macOS 26 (Tahoe) or newer | Windows 10 (2004+) or Windows 11, 64-bit |
 | Hardware | Apple silicon (M1 or newer) | Any modern PC; 8 GB RAM recommended |
 | Speech engine | Apple on-device `SpeechAnalyzer` (built in) | OpenAI Whisper via whisper.cpp (downloaded once, offline after) |
-| Smart AI (cleanup, Scribe, Rewrite, meeting notes) | Apple Intelligence (built in) | [Ollama](https://ollama.com) with a free local model (optional) |
+| Smart AI (cleanup, Scribe, Rewrite, smart transcripts, meeting notes) | Apple Intelligence (built in) | **Built-in local AI** (Qwen 2.5 1.5B, downloaded by the installer, offline) |
 | Note Taker: other side of calls | Screen Recording permission | Built in |
 
 ## Install on Mac
@@ -183,7 +183,7 @@ Then turn on **Join my calendar calls automatically**. The first time you join a
 
 **No administrator password needed.** Just Say It installs and runs for your Windows account only, so it works on work PCs and normal (non-admin) accounts.
 
-**Easiest:** download **`JustSayIt-Setup-2.1.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
+**Easiest:** download **`JustSayIt-Setup-2.2.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
 
 **Or** open PowerShell and paste:
 
@@ -206,11 +206,8 @@ The one-line installer also switches to this mode by itself if the setup program
 1. Just Say It opens and downloads the speech model once (~470 MB). Look for its icon in the **system tray**.
 2. Click into any text box, **hold Right Alt**, talk, and let go.
 3. *(Optional)* Screen context is on by default: it reads the visible email or chat with Windows' offline OCR so names are spelled right. Turn it off in Settings if you prefer.
-4. *(Optional, recommended)* For smart cleanup, Scribe and Rewrite, install the free local AI:
-   - Install [Ollama for Windows](https://ollama.com/download/windows)
-   - Open a terminal and run `ollama pull llama3.2:3b`
 
-   Without it, Just Say It still removes fillers, handles "scratch that", punctuation, your dictionary and snippets.
+**Built-in local AI:** the installer downloads a small, fast AI model (Qwen 2.5 1.5B, about 1.1 GB) that runs **inside Just Say It on your PC**. No extra programs, no admin rights, works offline. It powers smart cleanup, Scribe, AI Rewrite, smart transcripts and meeting summaries. If the download is skipped or interrupted, the app finishes it on first launch. You can switch to *Better quality* (Llama 3.2 3B) in **Settings**. If you already use [Ollama](https://ollama.com), it's used as a fallback.
 
 > Windows SmartScreen may warn about an unrecognized app because the installer isn't code-signed. Click **More info → Run anyway**.
 
@@ -255,7 +252,7 @@ Just Say It checks for new versions automatically (when it starts and once a day
 > **Recording conversations:** the Note Taker records you and, optionally, your computer's audio. Always tell people when you're recording them; laws differ by country and state.
 
 - **Mac:** speech by Apple's on-device `SpeechAnalyzer`; cleanup, Scribe and Rewrite by Apple's on-device Foundation Models; screen context read locally with Vision.
-- **Windows:** speech by Whisper running locally (whisper.cpp); screen context by Windows' built-in offline OCR; cleanup by a local Ollama model on `localhost`. The only network use is the one-time model download.
+- **Windows:** speech by Whisper running locally (whisper.cpp); screen context by Windows' built-in offline OCR; smart features by the built-in local AI (llama.cpp), all on your PC. The only network use is the one-time model download.
 - No servers, no analytics, no accounts. Settings and history stay on your computer (`~/Library/Application Support/JustSayIt` on Mac, `%LOCALAPPDATA%\JustSayIt` on Windows).
 
 ## Build from source
@@ -312,7 +309,8 @@ The Windows app is C# / WinForms, using [Whisper.net](https://github.com/sandroh
 | `windows/JustSayIt/MainWindow.cs` | Settings window (tabs) |
 | `windows/JustSayIt/Controller.cs` | Record → clean up → insert flow |
 | `windows/JustSayIt/Transcriber.cs` | Microphone + on-device Whisper |
-| `windows/JustSayIt/TextBrain.cs` | Filler removal, corrections, tone, Scribe, Rewrite (Ollama) |
+| `windows/JustSayIt/TextBrain.cs` | Filler removal, corrections, tone, Scribe, Rewrite |
+| `windows/JustSayIt/LocalAI.cs` | Built-in local AI (llama.cpp), model download and verification |
 | `windows/JustSayIt/Context.cs` | Reads app, browser URL, selection and text box via UI Automation |
 | `windows/JustSayIt/ScreenReader.cs` | Reads the visible window text with offline Windows OCR |
 | `windows/JustSayIt/Inserter.cs` | Pastes into the focused text box |
@@ -358,7 +356,7 @@ All of these run automatically on GitHub for every change. The Windows self-test
 Just Say It is original software. It uses these platforms and open-source libraries under their own licenses:
 
 - **Mac:** Apple's Speech (`SpeechAnalyzer`), Foundation Models (Apple Intelligence), Vision, ScreenCaptureKit, EventKit and WebKit frameworks.
-- **Windows:** [Whisper.net](https://github.com/sandrohanea/whisper.net) / [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with OpenAI's Whisper models (MIT), [NAudio](https://github.com/naudio/NAudio) (MIT), [Ical.Net](https://github.com/ical-org/ical.net) (MIT), Microsoft WebView2, and Windows' built-in OCR and UI Automation. Optional local AI via [Ollama](https://ollama.com).
+- **Windows:** [LLamaSharp](https://github.com/SciSharp/LLamaSharp) / [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT) with [Qwen 2.5](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF) (Apache 2.0) or [Llama 3.2](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct) (Llama 3.2 Community License) models, [Whisper.net](https://github.com/sandrohanea/whisper.net) / [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with OpenAI's Whisper models (MIT), [NAudio](https://github.com/naudio/NAudio) (MIT), [Ical.Net](https://github.com/ical-org/ical.net) (MIT), Microsoft WebView2, and Windows' built-in OCR and UI Automation. Optional local AI via [Ollama](https://ollama.com).
 - **CollectivIQ** is a separate service with its own terms. You need your own CollectivIQ account to use that integration.
 
 Zoom, Google Meet, Microsoft Teams, Google Calendar and Outlook are trademarks of their respective owners. They're mentioned only to describe compatibility, and Just Say It isn't affiliated with or endorsed by them. Full details are in [NOTICE.md](NOTICE.md).

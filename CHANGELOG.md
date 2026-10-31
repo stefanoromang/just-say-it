@@ -2,6 +2,15 @@
 
 All notable changes to **Just Say It**, an original app designed and built by **Stefano Roman Gunness**.
 
+## 2.2 – 2026-10-30
+
+### Windows: built-in local AI, always available
+- The Windows app now has its **own local AI engine built in** (llama.cpp via LLamaSharp). No Ollama or other program needed, no admin rights, works offline.
+- The **installer downloads the model during install** (Qwen 2.5 1.5B, 1.1 GB, checksum-verified). If that's skipped or interrupted, the app finishes the download by itself on first launch.
+- Powers smart dictation cleanup, Scribe, AI Rewrite, the **smart transcript** and meeting summaries.
+- **Settings › Built-in local AI:** *Fast* (Qwen 2.5 1.5B) or *Better quality* (Llama 3.2 3B, 2 GB). Ollama is still used as an optional fallback if installed.
+- New self-test check runs the local AI on a real Windows machine.
+
 ## 2.1 – 2026-10-30
 
 ### CollectivIQ: answers from Nemotron, with a live preview

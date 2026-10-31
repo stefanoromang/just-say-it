@@ -114,6 +114,7 @@ public class Prefs
     public string Language { get; set; } = "auto";
     public ModelSize Model { get; set; } = ModelSize.Small;
     public bool AiCleanup { get; set; } = true;
+    public LocalModel LocalModel { get; set; } = LocalModel.Fast;
     public string OllamaUrl { get; set; } = "http://localhost:11434";
     public string OllamaModel { get; set; } = "llama3.2:3b";
     public bool PlaySounds { get; set; } = true;

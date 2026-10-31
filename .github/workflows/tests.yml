@@ -37,18 +37,18 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
-      - name: Cache speech model
+      - name: Cache speech and local AI models
         uses: actions/cache@v4
         with:
           path: ~\AppData\Local\JustSayIt\models
-          key: whisper-base-v1
+          key: models-whisper-base-qwen25-1p5b-v1
       - name: Publish
         run: dotnet publish windows/JustSayIt/JustSayIt.csproj -c Release -r win-x64 --self-contained true -o out
       - name: Run self-test
         shell: pwsh
         run: |
           $p = Start-Process out\JustSayIt.exe -ArgumentList "--selftest", "$PWD\selftest-report.txt" -PassThru
-          $finished = $p.WaitForExit(900000)
+          $finished = $p.WaitForExit(1800000)
           if (Test-Path selftest-report.txt) { Get-Content selftest-report.txt }
           if (-not $finished) { $p.Kill(); throw "Self-test timed out" }
           exit $p.ExitCode
