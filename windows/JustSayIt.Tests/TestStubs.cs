@@ -9,3 +9,6 @@ public class CaptureContext
     public AppCategory Category = AppCategory.Other;
     public string PromptBlock() => "App: Test";
 }
+
+/// Stand-in for the Windows-only local AI types used by Store.
+public enum LocalModel { Fast, Quality }
