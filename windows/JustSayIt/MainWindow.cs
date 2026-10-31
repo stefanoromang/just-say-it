@@ -269,6 +269,19 @@ public sealed class MainWindow : Form
             if (last != null) CollectivIQ.Send(Path.GetFileNameWithoutExtension(last), File.ReadAllText(last), force: true);
         };
         ciq.Controls.Add(ciqOn);
+        var modelRow = new FlowLayoutPanel { AutoSize = true };
+        modelRow.Controls.Add(new Label { Text = "Answer with", AutoSize = true, Margin = new Padding(0, 7, 6, 0) });
+        var models = new[] { "Nemotron", "GPT", "Claude", "Gemini", "Grok", "Llama 4", "Kimi", "DeepSeek", "GLM", "Qwen", "" };
+        var modelBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+        foreach (var m in models) modelBox.Items.Add(m.Length == 0 ? "Don't change (All · Auto)" : m);
+        modelBox.SelectedIndex = Math.Max(0, Array.IndexOf(models, store.Prefs.CiqModel ?? ""));
+        modelBox.SelectedIndexChanged += (_, _) => { store.Prefs.CiqModel = models[modelBox.SelectedIndex]; store.Save(); };
+        modelRow.Controls.Add(modelBox);
+        ciq.Controls.Add(modelRow);
+        ciq.Controls.Add(L("Before sending, Just Say It opens All · Auto, clicks All Selected, keeps only this model and clicks Apply Changes.", Small, Color.DimGray, 760));
+        var preview = new CheckBox { Text = "Show a live preview while sending to CollectivIQ", Checked = store.Prefs.CiqShowPreview, AutoSize = true };
+        preview.CheckedChanged += (_, _) => { store.Prefs.CiqShowPreview = preview.Checked; store.Save(); };
+        ciq.Controls.Add(preview);
         ciq.Controls.Add(L("Prompt", Small, Color.DimGray));
         ciq.Controls.Add(prompt);
         ciq.Controls.Add(resetPrompt);
@@ -541,7 +554,7 @@ public sealed class MainWindow : Form
 
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 2.0 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 2.1 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

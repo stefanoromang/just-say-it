@@ -154,6 +154,8 @@ struct Prefs: Codable {
     var recordZoomCalls = true
     var recordMeetCalls = true
     var ciqEnabled = false
+    var ciqModel = "Nemotron"
+    var ciqShowPreview = true
     var ciqPrompt = ciqStandardPrompt
 
     init() {}
@@ -192,6 +194,8 @@ struct Prefs: Codable {
         recordZoomCalls = (try? c.decode(Bool.self, forKey: .recordZoomCalls)) ?? def.recordZoomCalls
         recordMeetCalls = (try? c.decode(Bool.self, forKey: .recordMeetCalls)) ?? def.recordMeetCalls
         ciqEnabled = (try? c.decode(Bool.self, forKey: .ciqEnabled)) ?? def.ciqEnabled
+        ciqModel = (try? c.decode(String.self, forKey: .ciqModel)) ?? def.ciqModel
+        ciqShowPreview = (try? c.decode(Bool.self, forKey: .ciqShowPreview)) ?? def.ciqShowPreview
         ciqPrompt = (try? c.decode(String.self, forKey: .ciqPrompt)) ?? def.ciqPrompt
         // Upgrade people still on the old short default to the standard meeting prompt.
         let trimmed = ciqPrompt.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))

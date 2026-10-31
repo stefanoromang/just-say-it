@@ -136,6 +136,8 @@ public class Prefs
     public bool RecordZoomCalls { get; set; } = true;
     public bool RecordMeetCalls { get; set; } = true;
     public bool CiqEnabled { get; set; } = false;
+    public string CiqModel { get; set; } = "Nemotron";
+    public bool CiqShowPreview { get; set; } = true;
     public string CiqPrompt { get; set; } = Prompts.CiqStandard;
     public Dictionary<AppCategory, Tone> Tones { get; set; } = new()
     {

@@ -141,6 +141,8 @@ After each recording, Just Say It can hand the transcript to **CollectivIQ**, in
 3. When a recording stops, choose **Smart**, **Raw** or **Both** (Both sends the raw transcript first, then the smart one). Just Say It sends it to a new CollectivIQ chat **in the background**. Nothing opens on screen unless you need to sign in again.
 4. A notification says your notes are **syncing and being processed inside CollectivIQ**, and another says when everything has been **sent**.
 
+**Model and preview:** before pasting, Just Say It opens **All · Auto**, clicks **All Selected**, keeps only the model you chose (**Nemotron** by default) and clicks **Apply Changes**. With **Show a live preview while sending** on (the default) you can watch every step; turn it off to send invisibly.
+
 The built-in prompt asks for a **16-section meeting analysis**: metadata, participants, how it started, the chronological flow, key points, decisions, open questions, risks, blockers, solutions, resolved issues, timelines, action items (Action → Owner → Due Date), key quotes, how it ended and an overall assessment. You can edit it, or click **Reset to the standard meeting prompt** to restore it. **Send my last note now** sends any saved note on demand.
 
 ### Privacy and consent
@@ -181,7 +183,7 @@ Then turn on **Join my calendar calls automatically**. The first time you join a
 
 **No administrator password needed.** Just Say It installs and runs for your Windows account only, so it works on work PCs and normal (non-admin) accounts.
 
-**Easiest:** download **`JustSayIt-Setup-2.0.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
+**Easiest:** download **`JustSayIt-Setup-2.1.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
 
 **Or** open PowerShell and paste:
 

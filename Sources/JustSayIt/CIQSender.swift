@@ -9,6 +9,9 @@ import WebKit
 /// anything; the window appears only when the person must sign in.
 @MainActor
 final class CIQSender: NSObject, WKNavigationDelegate {
+    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor in _ = try? await webView.evaluateJavaScript(CollectivIQ.reset) }
+    }
     static let shared = CIQSender()
 
     private var window: NSWindow?
@@ -57,7 +60,14 @@ final class CIQSender: NSObject, WKNavigationDelegate {
         shownForLogin = false
         settleUntil = nil
         let w = ensure()
-        if window?.isVisible != true {
+        if Store.shared.prefs.ciqShowPreview {
+            window?.alphaValue = 1
+            window?.ignoresMouseEvents = false
+            window?.collectionBehavior = []
+            window?.title = "CollectivIQ – Just Say It (preview)"
+            window?.makeKeyAndOrderFront(nil)
+            w.load(URLRequest(url: CollectivIQ.chatURL))
+        } else if window?.isVisible != true {
             // Invisible but "on screen", so the page keeps running timers and scripts.
             window?.alphaValue = 0
             window?.ignoresMouseEvents = true
@@ -100,7 +110,8 @@ final class CIQSender: NSObject, WKNavigationDelegate {
         case "sent":
             queue.removeFirst()
             sentCount += 1
-            if shownForLogin { hideAgain(); shownForLogin = false }
+            if shownForLogin && !Store.shared.prefs.ciqShowPreview { hideAgain() }
+            shownForLogin = false
             // Each message goes to its own new chat.
             if !queue.isEmpty {
                 web?.load(URLRequest(url: CollectivIQ.chatURL))
@@ -131,6 +142,7 @@ final class CIQSender: NSObject, WKNavigationDelegate {
     private func finish() {
         timer?.invalidate(); timer = nil
         if !shownForLogin, window?.alphaValue == 0 { window?.orderOut(nil) }
+        window?.title = "Sign in to CollectivIQ – Just Say It"
         settleUntil = nil
         let n = sentCount
         Controller.shared.overlay.show(.done)

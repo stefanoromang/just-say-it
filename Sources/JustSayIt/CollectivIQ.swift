@@ -74,30 +74,65 @@ enum CollectivIQ {
         }
     }
 
-    /// Fills the chat box and presses Send. Returns "login", "wait", "filled" or "sent".
+    /// Picks the model (All · Auto → All Selected → only <model> → Apply Changes), then fills the
+    /// chat box and presses Send. Returns "login", "wait", "model:…", "filled" or "sent".
     static func script(for msg: String) -> String {
-        let data = (try? JSONSerialization.data(withJSONObject: [msg])) ?? Data("[\"\"]".utf8)
-        let arg = String(decoding: data, as: UTF8.self)
-        return """
-        (function(msg){
-          if (location.pathname.indexOf('/login') === 0) return 'login';
-          var h = document.querySelector('wa-textarea[data-testid=chat-input]');
-          if (!h || !h.shadowRoot) return 'wait';
-          var ta = h.shadowRoot.querySelector('textarea');
-          if (!ta) return 'wait';
-          var b = document.querySelector('[data-testid=send-button]');
-          if (h.value === msg && b && !b.hasAttribute('disabled')) { b.click(); return 'sent'; }
-          if (h.value !== msg) {
-            ta.focus(); ta.value = msg;
-            ta.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
-            try { h.value = msg; } catch (e) {}
-            h.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
-            h.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
-          }
-          return 'filled';
-        })(\(arg)[0])
-        """
+        let model = Store.shared.prefs.ciqModel
+        let data = (try? JSONSerialization.data(withJSONObject: [msg, model])) ?? Data("[\"\",\"\"]".utf8)
+        let args = String(decoding: data, as: UTF8.self)
+        return "(" + Self.steps + ")(" + args + "[0], " + args + "[1])"
     }
+
+    /// Clears the per-chat progress kept in the page (call after loading a new chat).
+    static let reset = "window.__jsi = undefined; 'ok'"
+
+    static let steps = #"""
+(function(msg, model){
+  var S = window.__jsi || (window.__jsi = {modelDone: !model});
+  if (location.pathname.indexOf('/login') === 0) return 'login';
+  function txt(e){ return (e && (e.innerText || e.textContent) || '').trim(); }
+  // 1. Pick the model: All · Auto -> All Selected -> only <model> -> Apply Changes
+  if (!S.modelDone) {
+    var modal = document.querySelector('app-model-config-modal [role=dialog], app-model-config-modal .modal');
+    if (!modal) {
+      var trig = document.querySelector('[data-testid=model-config-trigger]');
+      if (!trig) return 'wait';
+      if (S.opened && Date.now() - S.opened < 4000) return 'wait';
+      S.opened = Date.now(); trig.click(); return 'model:open';
+    }
+    var chips = Array.prototype.slice.call(modal.querySelectorAll('button.model-chip'));
+    if (!chips.length) return 'wait';
+    var want = model.toLowerCase();
+    var target = chips.filter(function(c){ return txt(c.querySelector('.provider') || c).toLowerCase().indexOf(want) >= 0; })[0];
+    if (!target) { S.modelDone = true; var x = modal.querySelector('.plain-btn, [aria-label="Close modal"]'); if (x) x.click(); return 'model:missing'; }
+    var all = modal.querySelector('button.text-btn');
+    if (!S.cleared && all && /all selected/i.test(txt(all))) { S.cleared = true; all.click(); return 'model:all-selected'; }
+    S.cleared = true;
+    if (!target.classList.contains('is-selected')) { target.click(); return 'model:pick'; }
+    var others = chips.filter(function(c){ return c !== target && c.classList.contains('is-selected') && !c.disabled; });
+    if (others.length) { others[0].click(); return 'model:trim'; }
+    var apply = modal.querySelector('button.apply-btn');
+    if (apply && !apply.disabled) { S.modelDone = true; apply.click(); return 'model:apply'; }
+    S.modelDone = true; var c2 = modal.querySelector('.plain-btn, [aria-label="Close modal"]'); if (c2) c2.click(); return 'model:unchanged';
+  }
+  if (document.querySelector('app-model-config-modal [role=dialog], app-model-config-modal .modal')) return 'wait';
+  // 2. Paste the prompt + transcript and press Send
+  var h = document.querySelector('wa-textarea[data-testid=chat-input]');
+  if (!h || !h.shadowRoot) return 'wait';
+  var ta = h.shadowRoot.querySelector('textarea');
+  if (!ta) return 'wait';
+  var b = document.querySelector('[data-testid=send-button]');
+  if (h.value === msg && b && !b.hasAttribute('disabled')) { b.click(); return 'sent'; }
+  if (h.value !== msg) {
+    ta.focus(); ta.value = msg;
+    ta.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+    try { h.value = msg; } catch (e) {}
+    h.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+    h.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
+  }
+  return 'filled';
+})
+"""#
 
     static func notify(_ title: String, _ body: String) {
         let c = UNUserNotificationCenter.current()

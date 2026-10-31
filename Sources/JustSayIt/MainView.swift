@@ -673,6 +673,22 @@ struct CollectivIQPane: View {
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
             }
 
+            GroupBox("AI model and preview") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker("Answer with", selection: $store.prefs.ciqModel) {
+                        ForEach(["Nemotron", "GPT", "Claude", "Gemini", "Grok", "Llama 4", "Kimi", "DeepSeek", "GLM", "Qwen"], id: \.self) { Text($0).tag($0) }
+                        Text("Don't change (All · Auto)").tag("")
+                    }
+                    .frame(maxWidth: 360)
+                    Text("Before sending, Just Say It opens **All · Auto**, clicks **All Selected**, keeps only this model and clicks **Apply Changes**.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Toggle("Show a live preview while sending to CollectivIQ", isOn: $store.prefs.ciqShowPreview)
+                    Text(store.prefs.ciqShowPreview ? "The CollectivIQ window stays open so you can watch the model being chosen, the transcript pasted and sent." : "Sending happens invisibly in the background; the window opens only if you need to sign in.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+
             GroupBox("3. Your prompt") {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Placed before every note or transcript sent to CollectivIQ. Change it to anything you like.").font(.caption).foregroundStyle(.secondary)

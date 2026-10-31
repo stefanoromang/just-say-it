@@ -2,6 +2,13 @@
 
 All notable changes to **Just Say It**, an original app designed and built by **Stefano Roman Gunness**.
 
+## 2.1 – 2026-10-30
+
+### CollectivIQ: answers from Nemotron, with a live preview
+- Before pasting each transcript, Just Say It opens **All · Auto**, clicks **All Selected**, keeps **only Nemotron** and clicks **Apply Changes**, then pastes your prompt + transcript and presses Send.
+- Choose a different model (GPT, Claude, Gemini, Grok, Llama 4, Kimi, DeepSeek, GLM, Qwen) or **Don't change** in **Answer with**.
+- **Show a live preview while sending** (on by default): watch the model being chosen and the transcript sent. Turn it off for fully invisible background sending.
+
 ## 2.0 – 2026-10-30
 
 ### Notes: plain text, raw and smart transcripts

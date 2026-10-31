@@ -3,7 +3,7 @@
 ; https://github.com/stefanoromang/just-say-it
 
 #define AppName "Just Say It"
-#define AppVersion "2.0.0"
+#define AppVersion "2.1.0"
 #define AppPublisher "Stefano Roman Gunness"
 #define AppURL "https://github.com/stefanoromang/just-say-it"
 #define AppExe "JustSayIt.exe"

@@ -77,10 +77,44 @@ public static class CollectivIQ
     public static void OpenChat(bool signIn = false) => Ui.Run(() => CIQWindow.Shared.ShowAt(signIn ? LoginUrl : ChatUrl));
 
 
-    /// Fills CollectivIQ's chat box and presses Send. Returns "login", "wait", "filled" or "sent".
-    public static string Script(string msg) => """
-        (function(msg){
+    /// Picks the model (All · Auto → All Selected → only <model> → Apply Changes), then fills the
+    /// chat box and presses Send. Returns "login", "wait", "model:…", "filled" or "sent".
+    public static string Script(string msg) =>
+        "(" + Steps + ")(" + JsonSerializer.Serialize(msg) + ", " + JsonSerializer.Serialize(Store.Shared.Prefs.CiqModel ?? "") + ")";
+
+    public const string Reset = "window.__jsi = undefined; 'ok'";
+
+    const string Steps = """
+        (function(msg, model){
+          var S = window.__jsi || (window.__jsi = {modelDone: !model});
           if (location.pathname.indexOf('/login') === 0) return 'login';
+          function txt(e){ return (e && (e.innerText || e.textContent) || '').trim(); }
+          // 1. Pick the model: All · Auto -> All Selected -> only <model> -> Apply Changes
+          if (!S.modelDone) {
+            var modal = document.querySelector('app-model-config-modal [role=dialog], app-model-config-modal .modal');
+            if (!modal) {
+              var trig = document.querySelector('[data-testid=model-config-trigger]');
+              if (!trig) return 'wait';
+              if (S.opened && Date.now() - S.opened < 4000) return 'wait';
+              S.opened = Date.now(); trig.click(); return 'model:open';
+            }
+            var chips = Array.prototype.slice.call(modal.querySelectorAll('button.model-chip'));
+            if (!chips.length) return 'wait';
+            var want = model.toLowerCase();
+            var target = chips.filter(function(c){ return txt(c.querySelector('.provider') || c).toLowerCase().indexOf(want) >= 0; })[0];
+            if (!target) { S.modelDone = true; var x = modal.querySelector('.plain-btn, [aria-label="Close modal"]'); if (x) x.click(); return 'model:missing'; }
+            var all = modal.querySelector('button.text-btn');
+            if (!S.cleared && all && /all selected/i.test(txt(all))) { S.cleared = true; all.click(); return 'model:all-selected'; }
+            S.cleared = true;
+            if (!target.classList.contains('is-selected')) { target.click(); return 'model:pick'; }
+            var others = chips.filter(function(c){ return c !== target && c.classList.contains('is-selected') && !c.disabled; });
+            if (others.length) { others[0].click(); return 'model:trim'; }
+            var apply = modal.querySelector('button.apply-btn');
+            if (apply && !apply.disabled) { S.modelDone = true; apply.click(); return 'model:apply'; }
+            S.modelDone = true; var c2 = modal.querySelector('.plain-btn, [aria-label="Close modal"]'); if (c2) c2.click(); return 'model:unchanged';
+          }
+          if (document.querySelector('app-model-config-modal [role=dialog], app-model-config-modal .modal')) return 'wait';
+          // 2. Paste the prompt + transcript and press Send
           var h = document.querySelector('wa-textarea[data-testid=chat-input]');
           if (!h || !h.shadowRoot) return 'wait';
           var ta = h.shadowRoot.querySelector('textarea');
@@ -88,16 +122,15 @@ public static class CollectivIQ
           var b = document.querySelector('[data-testid=send-button]');
           if (h.value === msg && b && !b.hasAttribute('disabled')) { b.click(); return 'sent'; }
           if (h.value !== msg) {
-            ta.focus();
-            ta.value = msg;
+            ta.focus(); ta.value = msg;
             ta.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
             try { h.value = msg; } catch (e) {}
             h.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
             h.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
           }
           return 'filled';
-        })(
-        """ + JsonSerializer.Serialize(msg) + ")";
+        })
+        """;
 }
 
 /// The in-app CollectivIQ window (WebView2). Works hidden in the background and is shown
@@ -114,7 +147,7 @@ public sealed class CIQWindow : Form
     DateTime startedAt;
     DateTime? settleUntil;
     int sent;
-    bool shownForLogin, background;
+    bool shownForLogin, background, resetHooked;
 
     CIQWindow()
     {
@@ -160,9 +193,15 @@ public sealed class CIQWindow : Form
         if (msgs.Count == 0) return;
         foreach (var m in msgs) queue.Enqueue(m);
         sent = 0; settleUntil = null; shownForLogin = false; startedAt = DateTime.Now;
-        if (!Visible) { background = true; ShowInTaskbar = false; }
+        if (Store.Shared.Prefs.CiqShowPreview) { background = false; ShowInTaskbar = true; Text = "CollectivIQ – Just Say It (preview)"; Show(); Activate(); }
+        else if (!Visible) { background = true; ShowInTaskbar = false; }
         CollectivIQ.Notify("JustSayIt – syncing with CollectivIQ", "Your notes are being synced and processed inside CollectivIQ.");
-        try { await Ready(); web.CoreWebView2.Navigate(CollectivIQ.ChatUrl); }
+        try
+        {
+            await Ready();
+            if (!resetHooked) { resetHooked = true; web.CoreWebView2.NavigationCompleted += async (_, _) => { try { await web.CoreWebView2.ExecuteScriptAsync(CollectivIQ.Reset); } catch { } }; }
+            web.CoreWebView2.Navigate(CollectivIQ.ChatUrl);
+        }
         catch { CollectivIQ.Notify("JustSayIt – CollectivIQ", "CollectivIQ couldn't start (WebView2 Runtime missing?). Your notes are saved on this PC."); queue.Clear(); return; }
         timer.Start();
     }
@@ -192,7 +231,8 @@ public sealed class CIQWindow : Form
         if (result == "sent")
         {
             queue.Dequeue(); sent++;
-            if (shownForLogin) { shownForLogin = false; background = true; Hide(); }
+            if (shownForLogin && !Store.Shared.Prefs.CiqShowPreview) { background = true; Hide(); }
+            shownForLogin = false;
             if (queue.Count > 0) { web.CoreWebView2.Navigate(CollectivIQ.ChatUrl); startedAt = DateTime.Now; }
         }
         else if (result == "login" && !shownForLogin)
