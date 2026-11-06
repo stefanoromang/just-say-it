@@ -138,7 +138,11 @@ After each recording, Just Say It can hand the transcript to **CollectivIQ**, in
 
 1. On the **CollectivIQ** page (Mac) or in the **Note Taker** tab (Windows), click **Sign in to CollectivIQ** and sign in once with your own account. Tick **Remember me**.
 2. Turn on **After each Note Taker recording, send my prompt + the transcript to CollectivIQ**.
-3. When a recording stops, choose **Smart**, **Raw** or **Both** (Both sends the raw transcript first, then the smart one). Just Say It sends it to a new CollectivIQ chat **in the background**. Nothing opens on screen unless you need to sign in again.
+3. When a recording stops, Just Say It asks:
+   - **What to send:** **Raw** (exactly as heard), **AI version** (your prompt + the transcript with words and logic fixed) or **Both** (raw first, then the AI version, in the same chat).
+   - **Where:** **CIQ Chat** (a new chat) or your **DDR** (for example **Notetaker**). Set the DDR name in the CollectivIQ settings.
+
+   It's pasted and sent for you.
 4. A notification says your notes are **syncing and being processed inside CollectivIQ**, and another says when everything has been **sent**.
 
 **Model and preview:** before pasting, Just Say It opens **All · Auto**, clicks **All Selected**, keeps only the model you chose (**Nemotron** by default) and clicks **Apply Changes**. With **Show a live preview while sending** on (the default) you can watch every step; turn it off to send invisibly.
@@ -183,7 +187,7 @@ Then turn on **Join my calendar calls automatically**. The first time you join a
 
 **No administrator password needed.** Just Say It installs and runs for your Windows account only, so it works on work PCs and normal (non-admin) accounts.
 
-**Easiest:** download **`JustSayIt-Setup-2.2.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
+**Easiest:** download **`JustSayIt-Setup-2.3.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
 
 **Or** open PowerShell and paste:
 

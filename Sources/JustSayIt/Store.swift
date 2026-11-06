@@ -155,6 +155,7 @@ struct Prefs: Codable {
     var recordMeetCalls = true
     var ciqEnabled = false
     var ciqModel = "Nemotron"
+    var ciqDDRName = "Notetaker"
     var ciqShowPreview = true
     var ciqPrompt = ciqStandardPrompt
 
@@ -195,6 +196,7 @@ struct Prefs: Codable {
         recordMeetCalls = (try? c.decode(Bool.self, forKey: .recordMeetCalls)) ?? def.recordMeetCalls
         ciqEnabled = (try? c.decode(Bool.self, forKey: .ciqEnabled)) ?? def.ciqEnabled
         ciqModel = (try? c.decode(String.self, forKey: .ciqModel)) ?? def.ciqModel
+        ciqDDRName = (try? c.decode(String.self, forKey: .ciqDDRName)) ?? def.ciqDDRName
         ciqShowPreview = (try? c.decode(Bool.self, forKey: .ciqShowPreview)) ?? def.ciqShowPreview
         ciqPrompt = (try? c.decode(String.self, forKey: .ciqPrompt)) ?? def.ciqPrompt
         // Upgrade people still on the old short default to the standard meeting prompt.

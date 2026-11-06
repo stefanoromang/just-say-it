@@ -682,6 +682,12 @@ struct CollectivIQPane: View {
                     .frame(maxWidth: 360)
                     Text("Before sending, Just Say It opens **All · Auto**, clicks **All Selected**, keeps only this model and clicks **Apply Changes**.")
                         .font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Text("DDR option")
+                        TextField("DDR name, e.g. Notetaker", text: $store.prefs.ciqDDRName).frame(maxWidth: 220)
+                    }
+                    Text("After each recording you choose **CIQ Chat** or this **DDR**. Leave empty to always use CIQ Chat.")
+                        .font(.caption).foregroundStyle(.secondary)
                     Toggle("Show a live preview while sending to CollectivIQ", isOn: $store.prefs.ciqShowPreview)
                     Text(store.prefs.ciqShowPreview ? "The CollectivIQ window stays open so you can watch the model being chosen, the transcript pasted and sent." : "Sending happens invisibly in the background; the window opens only if you need to sign in.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -704,7 +710,7 @@ struct CollectivIQPane: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Press **Right ⇧ three times** to start the Note Taker, and three times again to stop.", systemImage: "1.circle")
                     Label("The note is saved in Documents › Just Say It Notes.", systemImage: "2.circle")
-                    Label("The CollectivIQ window opens a new chat, pastes your prompt + the transcript and presses Send.", systemImage: "3.circle")
+                    Label("Choose **Raw**, **AI version** or **Both**, then **CIQ Chat** or your **DDR** – it's pasted and sent for you.", systemImage: "3.circle")
                     Label("If you aren't signed in yet, sign in in that window, and the transcript is sent right after.", systemImage: "4.circle")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)

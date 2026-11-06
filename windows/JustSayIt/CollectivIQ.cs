@@ -25,51 +25,126 @@ public static class CollectivIQ
         return s + transcript;
     }
 
-    public enum Choice { Raw, Smart, Both }
+    public enum Choice { Raw, Ai, Both }
 
-    /// Called when a recording is saved: asks Raw / Smart / Both, then sends in the background.
+    /// Where a message goes: a new CIQ chat, or a DDR's direct-message chat (e.g. "Notetaker").
+    public record Destination(string? Ddr)
+    {
+        public static readonly Destination Chat = new((string?)null);
+    }
+
+    public static string RawMessage(string? title, string raw) =>
+        "RAW TRANSCRIPT (exactly as heard)" + (string.IsNullOrWhiteSpace(title) ? "" : $" – {title}") + "\n\n" + raw;
+
+    /// Called when a recording is saved: asks what to send and where, then sends in the background.
     public static void Deliver(string? title, string raw, string? smart)
     {
         var p = Store.Shared.Prefs;
         if (!p.CiqEnabled || string.IsNullOrWhiteSpace(raw)) return;
         Ui.Run(() =>
         {
-            Choice? choice = smart == null ? Choice.Raw : Ask();
+            var choice = AskWhat();
             if (choice == null) return;
-            var msgs = new List<string>();
-            if (choice is Choice.Raw or Choice.Both) msgs.Add(Message(p.CiqPrompt, title == null ? null : title + " (raw transcript)", raw));
-            if (smart != null && choice is Choice.Smart or Choice.Both) msgs.Add(Message(p.CiqPrompt, title == null ? null : title + " (smart transcript)", smart));
-            CIQWindow.Shared.SendMessages(msgs);
+            var dest = AskWhere();
+            if (dest == null) return;
+            var ai = Message(p.CiqPrompt, title, smart ?? raw);
+            var text = choice switch
+            {
+                Choice.Raw => RawMessage(title, raw),
+                Choice.Ai => ai,
+                _ => RawMessage(title, raw) + "\n\n" + new string('─', 40) + "\n\n" + ai,
+            };
+            CIQWindow.Shared.SendMessages(new List<string> { text }, dest);
         });
     }
 
-    /// For "Send my last note now" (no question asked).
+    /// For "Send my last note now" (asks where; no "what" question).
     public static void Send(string? title, string transcript, bool force = false)
     {
         var p = Store.Shared.Prefs;
         if ((!p.CiqEnabled && !force) || string.IsNullOrWhiteSpace(transcript)) return;
-        var text = Message(p.CiqPrompt, title, transcript);
-        Ui.Run(() => CIQWindow.Shared.SendMessages(new List<string> { text }));
+        Ui.Run(() =>
+        {
+            var dest = AskWhere();
+            if (dest == null) return;
+            CIQWindow.Shared.SendMessages(new List<string> { Message(p.CiqPrompt, title, transcript) }, dest);
+        });
     }
 
-    static Choice? Ask()
+    static int? Choose(string title, string info, string[] buttons)
     {
         using var f = new Form
         {
             Text = "Just Say It – CollectivIQ", FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterScreen,
-            TopMost = true, MinimizeBox = false, MaximizeBox = false, ClientSize = new Size(460, 170), Font = new Font("Segoe UI", 9.5f), Icon = Program.AppIcon,
+            TopMost = true, MinimizeBox = false, MaximizeBox = false, ClientSize = new Size(500, 180), Font = new Font("Segoe UI", 9.5f), Icon = Program.AppIcon,
         };
-        var lbl = new Label
+        f.Controls.Add(new Label { Text = title, Font = new Font("Segoe UI Semibold", 11f), AutoSize = false, Bounds = new Rectangle(16, 12, 470, 26) });
+        f.Controls.Add(new Label { Text = info, AutoSize = false, Bounds = new Rectangle(16, 40, 470, 80) });
+        int? result = null;
+        int x = 16;
+        for (int i = 0; i <= buttons.Length; i++)
         {
-            Text = "Send this recording to CollectivIQ?\n\nRaw: exactly as heard.\nSmart: words and logic fixed so it reads clearly.\nBoth: the raw transcript first, then the smart one.",
-            AutoSize = false, Bounds = new Rectangle(16, 12, 430, 100),
-        };
-        Choice? result = null;
-        Button B(string text, int x, Choice? c) { var b = new Button { Text = text, Bounds = new Rectangle(x, 120, 100, 32) }; b.Click += (_, _) => { result = c; f.Close(); }; return b; }
-        f.Controls.AddRange(new Control[] { lbl, B("Smart", 16, Choice.Smart), B("Raw", 124, Choice.Raw), B("Both", 232, Choice.Both), B("Don't send", 340, null) });
+            var idx = i;
+            var label = i < buttons.Length ? buttons[i] : "Don't send";
+            var btn = new Button { Text = label, AutoSize = true, MinimumSize = new Size(100, 32), Location = new Point(x, 132) };
+            btn.Click += (_, _) => { result = idx < buttons.Length ? idx : null; f.Close(); };
+            f.Controls.Add(btn);
+            x += Math.Max(108, TextRenderer.MeasureText(label, f.Font).Width + 30);
+        }
         f.ShowDialog();
         return result;
     }
+
+    static Choice? AskWhat() => Choose("Send this recording to CollectivIQ?",
+        "Raw: the transcript exactly as heard.\nAI version: your prompt + the transcript with words and logic fixed.\nBoth: raw first, then the AI version, in the same chat.",
+        new[] { "AI version", "Raw", "Both" }) switch { 0 => Choice.Ai, 1 => Choice.Raw, 2 => Choice.Both, _ => null };
+
+    static Destination? AskWhere()
+    {
+        var ddr = (Store.Shared.Prefs.CiqDdrName ?? "").Trim();
+        if (ddr.Length == 0) return Destination.Chat;
+        var model = string.IsNullOrEmpty(Store.Shared.Prefs.CiqModel) ? "All · Auto" : Store.Shared.Prefs.CiqModel;
+        return Choose("Where should it go?",
+            $"CIQ Chat: a new CollectivIQ chat (answered by {model}).\nDDR: your {ddr} DDR's chat.",
+            new[] { "CIQ Chat", $"DDR: {ddr}" }) switch { 0 => Destination.Chat, 1 => new Destination(ddr), _ => null };
+    }
+
+    /// Opens a DDR's direct-message chat, pastes the message and presses Send.
+    public static string DdrScript(string msg, string ddr) =>
+        "(" + DdrSteps + ")(" + JsonSerializer.Serialize(msg) + ", " + JsonSerializer.Serialize(ddr) + ")";
+
+    const string DdrSteps = """
+        (function(msg, ddrName){
+          var S = window.__jsiddr || (window.__jsiddr = {});
+          if (location.pathname.indexOf('/login') === 0) return 'login';
+          function txt(e){ return (e && (e.innerText || e.textContent) || '').trim(); }
+          var want = ddrName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          // 1. Open the DDR's direct-message chat from the sidebar (or the left rail).
+          if (location.pathname.indexOf('/chat/ddr/dm') !== 0) {
+            if (S.clicked && Date.now() - S.clicked < 4000) return 'wait';
+            var entries = Array.prototype.slice.call(document.querySelectorAll('[data-testid=ddr-dm-entry], [data-testid=chat-rail-persona-button]'));
+            if (!entries.length) return 'wait';
+            var hit = entries.filter(function(e){
+              var name = (txt(e.querySelector('.name')) || e.getAttribute('title') || e.getAttribute('aria-label') || txt(e)).toLowerCase().replace(/[^a-z0-9]/g, '');
+              return name.indexOf(want) >= 0;
+            })[0];
+            if (!hit) return 'ddr:missing';
+            S.clicked = Date.now(); hit.click(); return 'ddr:open';
+          }
+          // 2. Paste into the DDR composer and press Send.
+          var ta = document.querySelector('textarea[data-testid=ddr-composer-input]');
+          if (!ta || ta.disabled) return 'wait';
+          var b = document.querySelector('[data-testid=ddr-send-button]');
+          if (ta.value === msg && b && !b.disabled) { b.click(); S.sentAt = Date.now(); return 'sent'; }
+          if (ta.value !== msg) {
+            var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+            ta.focus(); setter.call(ta, msg);
+            ta.dispatchEvent(new Event('input', {bubbles: true}));
+            ta.dispatchEvent(new Event('change', {bubbles: true}));
+          }
+          return 'filled';
+        })
+        """;
 
     public static void Notify(string title, string body) =>
         Ui.Run(() => Program.Tray?.ShowBalloonTip(5000, title, body, ToolTipIcon.Info));
@@ -82,7 +157,7 @@ public static class CollectivIQ
     public static string Script(string msg) =>
         "(" + Steps + ")(" + JsonSerializer.Serialize(msg) + ", " + JsonSerializer.Serialize(Store.Shared.Prefs.CiqModel ?? "") + ")";
 
-    public const string Reset = "window.__jsi = undefined; 'ok'";
+    public const string Reset = "window.__jsi = undefined; window.__jsiddr = undefined; 'ok'";
 
     const string Steps = """
         (function(msg, model){
@@ -144,6 +219,7 @@ public sealed class CIQWindow : Form
     readonly System.Windows.Forms.Timer timer = new() { Interval = 1000 };
     Task? ready;
     readonly Queue<string> queue = new();
+    CollectivIQ.Destination destination = CollectivIQ.Destination.Chat;
     DateTime startedAt;
     DateTime? settleUntil;
     int sent;
@@ -188,9 +264,10 @@ public sealed class CIQWindow : Form
     }
 
     /// Sends the messages one after another in the background, each to a new chat.
-    public async void SendMessages(List<string> msgs)
+    public async void SendMessages(List<string> msgs, CollectivIQ.Destination? dest = null)
     {
         if (msgs.Count == 0) return;
+        destination = dest ?? CollectivIQ.Destination.Chat;
         foreach (var m in msgs) queue.Enqueue(m);
         sent = 0; settleUntil = null; shownForLogin = false; startedAt = DateTime.Now;
         if (Store.Shared.Prefs.CiqShowPreview) { background = false; ShowInTaskbar = true; Text = "CollectivIQ – Just Say It (preview)"; Show(); Activate(); }
@@ -226,7 +303,8 @@ public sealed class CIQWindow : Form
             return;
         }
         string result;
-        try { result = JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync(CollectivIQ.Script(queue.Peek()))) ?? ""; }
+        var js = destination.Ddr == null ? CollectivIQ.Script(queue.Peek()) : CollectivIQ.DdrScript(queue.Peek(), destination.Ddr);
+        try { result = JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync(js)) ?? ""; }
         catch { return; }
         if (result == "sent")
         {
@@ -234,6 +312,12 @@ public sealed class CIQWindow : Form
             if (shownForLogin && !Store.Shared.Prefs.CiqShowPreview) { background = true; Hide(); }
             shownForLogin = false;
             if (queue.Count > 0) { web.CoreWebView2.Navigate(CollectivIQ.ChatUrl); startedAt = DateTime.Now; }
+        }
+        else if (result == "ddr:missing" && destination.Ddr != null)
+        {
+            CollectivIQ.Notify("JustSayIt – DDR not found", $"No DDR called {destination.Ddr} was found, so the notes go to a new CIQ chat instead.");
+            destination = CollectivIQ.Destination.Chat;
+            web.CoreWebView2.Navigate(CollectivIQ.ChatUrl);
         }
         else if (result == "login" && !shownForLogin)
         {

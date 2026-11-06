@@ -280,6 +280,13 @@ public sealed class MainWindow : Form
         modelRow.Controls.Add(modelBox);
         ciq.Controls.Add(modelRow);
         ciq.Controls.Add(L("Before sending, Just Say It opens All · Auto, clicks All Selected, keeps only this model and clicks Apply Changes.", Small, Color.DimGray, 760));
+        var ddrRow = new FlowLayoutPanel { AutoSize = true };
+        ddrRow.Controls.Add(new Label { Text = "DDR option", AutoSize = true, Margin = new Padding(0, 7, 6, 0) });
+        var ddrBox = new TextBox { Width = 220, Text = store.Prefs.CiqDdrName ?? "", PlaceholderText = "DDR name, e.g. Notetaker" };
+        ddrBox.Leave += (_, _) => { store.Prefs.CiqDdrName = ddrBox.Text.Trim(); store.Save(); };
+        ddrRow.Controls.Add(ddrBox);
+        ciq.Controls.Add(ddrRow);
+        ciq.Controls.Add(L("After each recording you choose CIQ Chat or this DDR. Leave empty to always use CIQ Chat.", Small, Color.DimGray, 760));
         var preview = new CheckBox { Text = "Show a live preview while sending to CollectivIQ", Checked = store.Prefs.CiqShowPreview, AutoSize = true };
         preview.CheckedChanged += (_, _) => { store.Prefs.CiqShowPreview = preview.Checked; store.Save(); };
         ciq.Controls.Add(preview);
@@ -561,7 +568,7 @@ public sealed class MainWindow : Form
 
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 2.2 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L("Just Say It 2.3 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

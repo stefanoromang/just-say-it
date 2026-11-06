@@ -15,7 +15,10 @@ enum CollectivIQ {
     static let loginURL = URL(string: "https://collectiviq.ai/login")!
     static let defaultPrompt = ciqStandardPrompt
 
-    enum Choice { case raw, smart, both }
+    enum Choice { case raw, ai, both }
+
+    /// Where a message goes: a new CIQ chat, or a DDR's direct-message chat (e.g. "Notetaker").
+    enum Destination: Equatable { case chat, ddr(String) }
 
     static func message(prompt: String, title: String?, transcript: String) -> String {
         var s = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -26,53 +29,118 @@ enum CollectivIQ {
         return s
     }
 
-    /// Called when a recording is saved: asks Raw / Smart / Both, then sends in the background.
-    static func deliver(title: String?, raw: String, smart: String?) {
-        guard Store.shared.prefs.ciqEnabled, !raw.isEmpty else { return }
-        let choice = smart == nil ? .raw : ask()
-        guard let choice else { return }
-        let prompt = Store.shared.prefs.ciqPrompt
-        var msgs: [String] = []
-        if choice == .raw || choice == .both {
-            msgs.append(message(prompt: prompt, title: title.map { $0 + " (raw transcript)" }, transcript: raw))
-        }
-        if let smart, choice == .smart || choice == .both {
-            msgs.append(message(prompt: prompt, title: title.map { $0 + " (smart transcript)" }, transcript: smart))
-        }
-        CIQSender.shared.send(msgs)
+    /// Raw transcript on its own (no prompt).
+    static func rawMessage(title: String?, raw: String) -> String {
+        var s = "RAW TRANSCRIPT (exactly as heard)"
+        if let title, !title.isEmpty { s += " – \(title)" }
+        return s + "\n\n" + raw
     }
 
-    /// For "Send my last note now" and other one-off sends (no question asked).
+    /// Called when a recording is saved: asks what to send and where, then sends in the background.
+    static func deliver(title: String?, raw: String, smart: String?) {
+        guard Store.shared.prefs.ciqEnabled, !raw.isEmpty else { return }
+        guard let choice = askWhat() else { return }
+        guard let dest = askWhere() else { return }
+        let prompt = Store.shared.prefs.ciqPrompt
+        let ai = message(prompt: prompt, title: title, transcript: smart ?? raw)
+        let text: String
+        switch choice {
+        case .raw: text = rawMessage(title: title, raw: raw)
+        case .ai: text = ai
+        case .both: text = rawMessage(title: title, raw: raw) + "\n\n" + String(repeating: "─", count: 40) + "\n\n" + ai
+        }
+        CIQSender.shared.send([text], to: dest)
+    }
+
+    /// For "Send my last note now" (asks where; no "what" question).
     static func send(title: String?, transcript: String, force: Bool = false) {
         let p = Store.shared.prefs
         guard (p.ciqEnabled || force), !transcript.isEmpty else { return }
-        CIQSender.shared.send([message(prompt: p.ciqPrompt, title: title, transcript: transcript)])
+        guard let dest = askWhere() else { return }
+        CIQSender.shared.send([message(prompt: p.ciqPrompt, title: title, transcript: transcript)], to: dest)
     }
 
     static func showWindow(signIn: Bool = false) {
         CIQSender.shared.show(url: signIn ? loginURL : chatURL)
     }
 
-    private static func ask() -> Choice? {
+    private static func alert(_ title: String, _ info: String, _ buttons: [String]) -> Int? {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         defer { NSApp.setActivationPolicy(.accessory) }
         let a = NSAlert()
-        a.messageText = "Send this recording to CollectivIQ?"
-        a.informativeText = "Raw: exactly as heard.\nSmart: words and logic fixed so it reads clearly.\nBoth: the raw transcript first, then the smart one."
-        a.addButton(withTitle: "Smart")
-        a.addButton(withTitle: "Raw")
-        a.addButton(withTitle: "Both")
+        a.messageText = title
+        a.informativeText = info
+        for b in buttons { a.addButton(withTitle: b) }
         let skip = a.addButton(withTitle: "Don't send")
         skip.keyEquivalent = "\u{1b}"
         a.window.level = .floating
-        switch a.runModal() {
-        case .alertFirstButtonReturn: return .smart
-        case .alertSecondButtonReturn: return .raw
-        case .alertThirdButtonReturn: return .both
+        let r = a.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+        return r < buttons.count ? r : nil
+    }
+
+    private static func askWhat() -> Choice? {
+        switch alert("Send this recording to CollectivIQ?",
+                     "Raw: the transcript exactly as heard.\nAI version: your prompt + the transcript with words and logic fixed.\nBoth: raw first, then the AI version, in the same chat.",
+                     ["AI version", "Raw", "Both"]) {
+        case 0: return .ai
+        case 1: return .raw
+        case 2: return .both
         default: return nil
         }
     }
+
+    private static func askWhere() -> Destination? {
+        let ddr = Store.shared.prefs.ciqDDRName.trimmingCharacters(in: .whitespaces)
+        if ddr.isEmpty { return .chat }
+        switch alert("Where should it go?",
+                     "CIQ Chat: a new CollectivIQ chat (answered by \(Store.shared.prefs.ciqModel.isEmpty ? "All · Auto" : Store.shared.prefs.ciqModel)).\nDDR: your \(ddr) DDR's chat.",
+                     ["CIQ Chat", "DDR: \(ddr)"]) {
+        case 0: return .chat
+        case 1: return .ddr(ddr)
+        default: return nil
+        }
+    }
+
+    /// Opens a DDR's direct-message chat, pastes the message and presses Send.
+    static func ddrScript(for msg: String, ddr: String) -> String {
+        let data = (try? JSONSerialization.data(withJSONObject: [msg, ddr])) ?? Data("[\"\",\"\"]".utf8)
+        let args = String(decoding: data, as: UTF8.self)
+        return "(" + ddrSteps + ")(" + args + "[0], " + args + "[1])"
+    }
+
+    static let ddrSteps = #"""
+(function(msg, ddrName){
+  var S = window.__jsiddr || (window.__jsiddr = {});
+  if (location.pathname.indexOf('/login') === 0) return 'login';
+  function txt(e){ return (e && (e.innerText || e.textContent) || '').trim(); }
+  var want = ddrName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  // 1. Open the DDR's direct-message chat from the sidebar (or the left rail).
+  if (location.pathname.indexOf('/chat/ddr/dm') !== 0) {
+    if (S.clicked && Date.now() - S.clicked < 4000) return 'wait';
+    var entries = Array.prototype.slice.call(document.querySelectorAll('[data-testid=ddr-dm-entry], [data-testid=chat-rail-persona-button]'));
+    if (!entries.length) return 'wait';
+    var hit = entries.filter(function(e){
+      var name = (txt(e.querySelector('.name')) || e.getAttribute('title') || e.getAttribute('aria-label') || txt(e)).toLowerCase().replace(/[^a-z0-9]/g, '');
+      return name.indexOf(want) >= 0;
+    })[0];
+    if (!hit) return 'ddr:missing';
+    S.clicked = Date.now(); hit.click(); return 'ddr:open';
+  }
+  // 2. Paste into the DDR composer and press Send.
+  var ta = document.querySelector('textarea[data-testid=ddr-composer-input]');
+  if (!ta || ta.disabled) return 'wait';
+  var b = document.querySelector('[data-testid=ddr-send-button]');
+  if (ta.value === msg && b && !b.disabled) { b.click(); S.sentAt = Date.now(); return 'sent'; }
+  if (ta.value !== msg) {
+    var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    ta.focus(); setter.call(ta, msg);
+    ta.dispatchEvent(new Event('input', {bubbles: true}));
+    ta.dispatchEvent(new Event('change', {bubbles: true}));
+  }
+  return 'filled';
+})
+"""#
 
     /// Picks the model (All · Auto → All Selected → only <model> → Apply Changes), then fills the
     /// chat box and presses Send. Returns "login", "wait", "model:…", "filled" or "sent".
@@ -84,7 +152,7 @@ enum CollectivIQ {
     }
 
     /// Clears the per-chat progress kept in the page (call after loading a new chat).
-    static let reset = "window.__jsi = undefined; 'ok'"
+    static let reset = "window.__jsi = undefined; window.__jsiddr = undefined; 'ok'"
 
     static let steps = #"""
 (function(msg, model){

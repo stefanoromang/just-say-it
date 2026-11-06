@@ -17,6 +17,7 @@ final class CIQSender: NSObject, WKNavigationDelegate {
     private var window: NSWindow?
     private var web: WKWebView?
     private var queue: [String] = []
+    private var destination: CollectivIQ.Destination = .chat
     private var timer: Timer?
     private var startedAt = Date()
     private var sentCount = 0
@@ -52,8 +53,9 @@ final class CIQSender: NSObject, WKNavigationDelegate {
     }
 
     /// Queues messages and sends them in the background, in order.
-    func send(_ msgs: [String]) {
+    func send(_ msgs: [String], to dest: CollectivIQ.Destination = .chat) {
         guard !msgs.isEmpty else { return }
+        destination = dest
         queue.append(contentsOf: msgs)
         sentCount = 0
         startedAt = Date()
@@ -100,7 +102,12 @@ final class CIQSender: NSObject, WKNavigationDelegate {
             fail("CollectivIQ didn't respond. Your notes are saved on this Mac.")
             return
         }
-        web.evaluateJavaScript(CollectivIQ.script(for: msg)) { result, _ in
+        let js: String
+        switch destination {
+        case .chat: js = CollectivIQ.script(for: msg)
+        case .ddr(let name): js = CollectivIQ.ddrScript(for: msg, ddr: name)
+        }
+        web.evaluateJavaScript(js) { result, _ in
             MainActor.assumeIsolated { self.handle(result as? String) }
         }
     }
@@ -116,6 +123,12 @@ final class CIQSender: NSObject, WKNavigationDelegate {
             if !queue.isEmpty {
                 web?.load(URLRequest(url: CollectivIQ.chatURL))
                 startedAt = Date()
+            }
+        case "ddr:missing":
+            if case .ddr(let name) = destination {
+                CollectivIQ.notify("JustSayIt – DDR not found", "No DDR called \(name) was found, so the notes go to a new CIQ chat instead.")
+                destination = .chat
+                web?.load(URLRequest(url: CollectivIQ.chatURL))
             }
         case "login":
             if !shownForLogin {

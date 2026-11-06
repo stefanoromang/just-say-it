@@ -2,6 +2,14 @@
 
 All notable changes to **Just Say It**, an original app designed and built by **Stefano Roman Gunness**.
 
+## 2.3 – 2026-11-06
+
+### CollectivIQ: choose what to send, and where
+When a meeting ends or you stop the Note Taker, Just Say It asks two quick questions:
+1. **What to send:** **Raw** (the transcript exactly as heard), **AI version** (your prompt + the transcript with words and logic fixed) or **Both** (raw first, then the AI version, **in the same chat**).
+2. **Where:** **CIQ Chat** (a new CollectivIQ chat, answered by Nemotron) or your **DDR** (default name **Notetaker**). Just Say It opens that DDR's chat, pastes and sends.
+- Set the DDR name in the CollectivIQ settings; leave it empty to always use CIQ Chat. If the DDR isn't found, the notes go to a new CIQ chat instead.
+
 ## 2.2 – 2026-10-30
 
 ### Windows: built-in local AI, always available
