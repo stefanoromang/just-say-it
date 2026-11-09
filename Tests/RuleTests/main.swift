@@ -161,6 +161,14 @@ var passed = 0
     LearnCore.remember(&learning, example: "Hi team, the launch moves to Monday. Thanks!", category: "work")
     check("style example kept", LearnCore.styleBlock(learning, category: "work")?.contains("launch moves") == true)
 
+    // CollectivIQ sending rule
+    check("route: Notetaker gets raw", CiqRoute.Route.parse("route:notetaker:Notetaker") == .notetaker("Notetaker") && CiqRoute.Route.notetaker("N").sendsRaw)
+    check("route: assistant gets AI", CiqRoute.Route.parse("route:assistant:Ana") == .assistant("Ana") && !CiqRoute.Route.assistant("Ana").sendsRaw)
+    check("route: no DDR → chat", CiqRoute.Route.parse("route:none") == .chat && CiqRoute.Route.chat.destination == .chat)
+    check("route: DDR destination", CiqRoute.Route.assistant("Ana").destination == .ddr("Ana"))
+    check("route: wait ignored", CiqRoute.Route.parse("wait") == nil)
+    check("chat models", CiqRoute.chatModels == ["Gemini", "Nemotron"])
+
     print(failures == 0 ? "✓ All \(passed) Mac rule tests passed" : "\(failures) failed, \(passed) passed")
     exit(failures == 0 ? 0 : 1)
 }

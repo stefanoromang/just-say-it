@@ -104,3 +104,28 @@ public class LearningTests
         Assert.Contains("launch moves", LearnCore.StyleBlock(l, "Work"));
     }
 }
+
+public class CiqRouteTests
+{
+    [Theory]
+    [InlineData("route:notetaker:Notetaker", "notetaker", "Notetaker", true)]
+    [InlineData("route:assistant:Ana – Assistant", "assistant", "Ana – Assistant", false)]
+    [InlineData("route:none", "chat", null, false)]
+    public void ParsesRoutes(string r, string kind, string? name, bool raw)
+    {
+        var route = CiqRoute.Route.Parse(r)!;
+        Assert.Equal(kind, route.Kind);
+        Assert.Equal(name, route.Destination.Ddr);
+        Assert.Equal(raw, route.SendsRaw);
+    }
+
+    [Fact]
+    public void IgnoresOtherResults()
+    {
+        Assert.Null(CiqRoute.Route.Parse("wait"));
+        Assert.Null(CiqRoute.Route.Parse("login"));
+    }
+
+    [Fact]
+    public void ChatUsesGeminiAndNemotron() => Assert.Equal(new[] { "Gemini", "Nemotron" }, CiqRoute.ChatModels);
+}

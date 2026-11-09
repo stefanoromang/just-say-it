@@ -187,7 +187,7 @@ final class NoteTaker: ObservableObject {
         CollectivIQ.deliver(title: note.meeting?.title,
                             raw: note.plainText,
                             smart: note.smart,
-                            automatic: sendImmediately && Store.shared.prefs.ciqAutoSend)
+                            automatic: true)
     }
 
     /// Status of a finishing recording; never overwrites the status of a new one that's running.

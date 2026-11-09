@@ -16,6 +16,7 @@
     <Compile Include="../JustSayIt/CallApps.cs" Link="CallApps.cs" />
     <Compile Include="../JustSayIt/LanguageMix.cs" Link="LanguageMix.cs" />
     <Compile Include="../JustSayIt/LearnCore.cs" Link="LearnCore.cs" />
+    <Compile Include="../JustSayIt/CiqRoute.cs" Link="CiqRoute.cs" />
   </ItemGroup>
 
   <ItemGroup>

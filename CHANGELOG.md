@@ -2,6 +2,15 @@
 
 All notable changes to **Just Say It**, an original app designed and built by **Stefano Roman Gunness**.
 
+## 2.6 – 2026-11-09
+
+### CollectivIQ: the right notes to the right place, automatically
+Every recording is now sent right away with no questions, based on the DDRs you have in CollectivIQ:
+- **DDR called Notetaker** → the **raw transcript** goes to it.
+- **No Notetaker, but another DDR (your assistant)** → the **AI version** goes to the first one.
+- **No DDR at all** → the **AI version** goes to **CIQ Chat**, answered by **Gemini** and **Nemotron** together.
+- Your DDRs are checked every time, so it adapts when one is added or removed. Settings show where the last recording went.
+
 ## 2.5 – 2026-11-09
 
 ### Speak English, Spanish, Portuguese and Italian without switching

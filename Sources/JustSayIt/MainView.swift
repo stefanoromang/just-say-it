@@ -725,6 +725,7 @@ struct UpdatesSection: View {
 
 struct CollectivIQPane: View {
     @ObservedObject var store: Store
+    @ObservedObject var sender = CIQSender.shared
     @ObservedObject var n = NoteTaker.shared
 
     var body: some View {
@@ -753,34 +754,22 @@ struct CollectivIQPane: View {
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
             }
 
-            GroupBox("AI model and preview") {
+            GroupBox("Where your notes go (automatic, no questions)") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Picker("Answer with", selection: $store.prefs.ciqModel) {
-                        ForEach(["Nemotron", "GPT", "Claude", "Gemini", "Grok", "Llama 4", "Kimi", "DeepSeek", "GLM", "Qwen"], id: \.self) { Text($0).tag($0) }
-                        Text("Don't change (All · Auto)").tag("")
-                    }
-                    .frame(maxWidth: 360)
-                    Text("Before sending, Just Say It opens **All · Auto**, clicks **All Selected**, keeps only this model and clicks **Apply Changes**.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    Label("You have a DDR called **\(store.prefs.ciqDDRName.isEmpty ? "Notetaker" : store.prefs.ciqDDRName)** → the **raw transcript** goes there.", systemImage: "1.circle")
+                    Label("No Notetaker DDR, but another DDR (your assistant) → the **AI version** goes to it.", systemImage: "2.circle")
+                    Label("No DDR at all → the **AI version** goes to **CIQ Chat**, answered by **Gemini** and **Nemotron**.", systemImage: "3.circle")
                     HStack {
-                        Text("DDR option")
-                        TextField("DDR name, e.g. Notetaker", text: $store.prefs.ciqDDRName).frame(maxWidth: 220)
+                        Text("Notetaker DDR name")
+                        TextField("Notetaker", text: $store.prefs.ciqDDRName).frame(maxWidth: 220)
                     }
-                    Text("After each recording you choose **CIQ Chat** or this **DDR**. Leave empty to always use CIQ Chat.")
+                    Text("Just Say It checks your DDRs in CollectivIQ each time it sends, so it adapts by itself when a DDR is added or removed.")
                         .font(.caption).foregroundStyle(.secondary)
-                    Toggle("When a call ends or I press End Note Taker, send right away without asking", isOn: $store.prefs.ciqAutoSend)
-                    if store.prefs.ciqAutoSend {
-                        HStack(spacing: 16) {
-                            Picker("Send", selection: $store.prefs.ciqAutoWhat) {
-                                Text("Both").tag("both"); Text("AI version").tag("ai"); Text("Raw").tag("raw")
-                            }.frame(maxWidth: 200)
-                            Picker("To", selection: $store.prefs.ciqAutoWhere) {
-                                Text("DDR: \(store.prefs.ciqDDRName.isEmpty ? "–" : store.prefs.ciqDDRName)").tag("ddr"); Text("CIQ Chat").tag("chat")
-                            }.frame(maxWidth: 240)
-                        }
+                    if !sender.lastRoute.isEmpty {
+                        Text("Last recording: \(sender.lastRoute)").font(.caption).foregroundStyle(.green)
                     }
                     Toggle("Show a live preview while sending to CollectivIQ", isOn: $store.prefs.ciqShowPreview)
-                    Text(store.prefs.ciqShowPreview ? "The CollectivIQ window stays open so you can watch the model being chosen, the transcript pasted and sent." : "Sending happens invisibly in the background; the window opens only if you need to sign in.")
+                    Text(store.prefs.ciqShowPreview ? "The CollectivIQ window stays open so you can watch the notes being sent." : "Sending happens invisibly in the background; the window opens only if you need to sign in.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
@@ -801,7 +790,7 @@ struct CollectivIQPane: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Press **Right ⇧ three times** to start the Note Taker, and three times again to stop.", systemImage: "1.circle")
                     Label("The note is saved in Documents › Just Say It Notes.", systemImage: "2.circle")
-                    Label("Choose **Raw**, **AI version** or **Both**, then **CIQ Chat** or your **DDR** – it's pasted and sent for you.", systemImage: "3.circle")
+                    Label("It's sent right away, following the rule above – no questions.", systemImage: "3.circle")
                     Label("If you aren't signed in yet, sign in in that window, and the transcript is sent right after.", systemImage: "4.circle")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)

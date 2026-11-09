@@ -8,7 +8,7 @@ import WebKit
 /// Hidden CollectivIQ web view. Messages are sent one after another without showing
 /// anything; the window appears only when the person must sign in.
 @MainActor
-final class CIQSender: NSObject, WKNavigationDelegate {
+final class CIQSender: NSObject, WKNavigationDelegate, ObservableObject {
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
             _ = try? await webView.evaluateJavaScript(CollectivIQ.reset)
@@ -25,7 +25,14 @@ final class CIQSender: NSObject, WKNavigationDelegate {
 
     private var window: NSWindow?
     private var web: WKWebView?
-    private struct Item { let text: String; var destination: CollectivIQ.Destination; let id = UUID() }
+    private struct Item {
+        var text: String
+        var destination: CollectivIQ.Destination
+        let id = UUID()
+        /// For `.auto`: the raw and AI versions; the route check picks one.
+        var raw = ""
+        var ai = ""
+    }
     private var queue: [Item] = []
     /// The page shown is ready for the message at the front of the queue.
     private var pageReadyFor: UUID?
@@ -66,6 +73,19 @@ final class CIQSender: NSObject, WKNavigationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
+
+    /// Queues one recording; where it goes and which version is sent are decided from this person's
+    /// DDRs once CollectivIQ is open (see CollectivIQ.Route).
+    func sendRouted(raw: String, ai: String) {
+        send([ai], to: .auto)
+        if let i = queue.lastIndex(where: { $0.destination == .auto && $0.text == ai }) {
+            queue[i].raw = raw
+            queue[i].ai = ai
+        }
+    }
+
+    /// Where the last recording went (shown in settings).
+    @Published private(set) var lastRoute = ""
 
     /// Queues messages and sends them in the background, in order.
     func send(_ msgs: [String], to dest: CollectivIQ.Destination = .chat) {
@@ -134,6 +154,7 @@ final class CIQSender: NSObject, WKNavigationDelegate {
         switch item.destination {
         case .chat: js = CollectivIQ.script(for: item.text)
         case .ddr(let name): js = CollectivIQ.ddrScript(for: item.text, ddr: name)
+        case .auto: js = CollectivIQ.routeScript(notetaker: Store.shared.prefs.ciqDDRName.trimmingCharacters(in: .whitespaces))
         }
         inFlight = true
         web.evaluateJavaScript(js) { result, _ in
@@ -146,6 +167,14 @@ final class CIQSender: NSObject, WKNavigationDelegate {
 
     private func handle(_ r: String?, for id: UUID) {
         guard let first = queue.first, first.id == id else { return }
+        if let r, let route = CollectivIQ.Route.parse(r), first.destination == .auto {
+            // Decided: send the right version to the right place, starting from a fresh page.
+            queue[0].destination = route.destination
+            queue[0].text = route.sendsRaw ? first.raw : first.ai
+            lastRoute = "Sent " + route.label
+            pageReadyFor = nil
+            return
+        }
         switch r {
         case "sent":
             queue.removeFirst()
@@ -157,6 +186,7 @@ final class CIQSender: NSObject, WKNavigationDelegate {
             if case .ddr(let name) = first.destination {
                 CollectivIQ.notify("JustSayIt – DDR not found", "No DDR called \(name) was found, so the notes go to a new CIQ chat instead.")
                 queue[0].destination = .chat
+                if !first.ai.isEmpty { queue[0].text = first.ai }
                 loadFresh(for: queue[0])
             }
         case "login":

@@ -17,8 +17,9 @@ enum CollectivIQ {
 
     enum Choice: String { case raw, ai, both }
 
-    /// Where a message goes: a new CIQ chat, or a DDR's direct-message chat (e.g. "Notetaker").
-    enum Destination: Equatable { case chat, ddr(String) }
+    typealias Destination = CiqRoute.Destination
+    typealias Route = CiqRoute.Route
+    static var chatModels: [String] { CiqRoute.chatModels }
 
     static func message(prompt: String, title: String?, transcript: String) -> String {
         var s = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -36,81 +37,57 @@ enum CollectivIQ {
         return s + "\n\n" + raw
     }
 
-    /// Called when a recording is saved. With `automatic` (call ended / End Note Taker) it sends right
-    /// away using the saved defaults; otherwise it asks what to send and where.
-    static func deliver(title: String?, raw: String, smart: String?, automatic: Bool = false) {
+    /// Called when a recording is saved: sends it right away, no questions, following the rule above.
+    static func deliver(title: String?, raw: String, smart: String?, automatic: Bool = true) {
         let p = Store.shared.prefs
         guard p.ciqEnabled, !raw.isEmpty else { return }
-        let choice: Choice
-        let dest: Destination
-        if automatic {
-            choice = Choice(rawValue: p.ciqAutoWhat) ?? .both
-            let ddr = p.ciqDDRName.trimmingCharacters(in: .whitespaces)
-            dest = (p.ciqAutoWhere == "ddr" && !ddr.isEmpty) ? .ddr(ddr) : .chat
-        } else {
-            guard let c = askWhat(), let d = askWhere() else { return }
-            choice = c; dest = d
-        }
-        let prompt = Store.shared.prefs.ciqPrompt
-        let ai = message(prompt: prompt, title: title, transcript: smart ?? raw)
-        let text: String
-        switch choice {
-        case .raw: text = rawMessage(title: title, raw: raw)
-        case .ai: text = ai
-        case .both: text = rawMessage(title: title, raw: raw) + "\n\n" + String(repeating: "─", count: 40) + "\n\n" + ai
-        }
-        CIQSender.shared.send([text], to: dest)
+        CIQSender.shared.sendRouted(raw: rawMessage(title: title, raw: raw),
+                                    ai: message(prompt: p.ciqPrompt, title: title, transcript: smart ?? raw))
     }
 
-    /// For "Send my last note now" (asks where; no "what" question).
+    /// "Send my last note now": same rule.
     static func send(title: String?, transcript: String, force: Bool = false) {
         let p = Store.shared.prefs
         guard (p.ciqEnabled || force), !transcript.isEmpty else { return }
-        guard let dest = askWhere() else { return }
-        CIQSender.shared.send([message(prompt: p.ciqPrompt, title: title, transcript: transcript)], to: dest)
+        CIQSender.shared.sendRouted(raw: rawMessage(title: title, raw: transcript),
+                                    ai: message(prompt: p.ciqPrompt, title: title, transcript: transcript))
     }
 
     static func showWindow(signIn: Bool = false) {
         CIQSender.shared.show(url: signIn ? loginURL : chatURL)
     }
 
-    private static func alert(_ title: String, _ info: String, _ buttons: [String]) -> Int? {
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        defer { NSApp.setActivationPolicy(.accessory) }
-        let a = NSAlert()
-        a.messageText = title
-        a.informativeText = info
-        for b in buttons { a.addButton(withTitle: b) }
-        let skip = a.addButton(withTitle: "Don't send")
-        skip.keyEquivalent = "\u{1b}"
-        a.window.level = .floating
-        let r = a.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
-        return r < buttons.count ? r : nil
+    /// Looks at this person's DDRs and says where the notes go. Waits until the list has loaded and
+    /// stopped changing; with no DDR showing after a while, the answer is CIQ Chat.
+    static func routeScript(notetaker: String) -> String {
+        let data = (try? JSONSerialization.data(withJSONObject: [notetaker])) ?? Data("[\"\"]".utf8)
+        return "(" + routeSteps + ")(" + String(decoding: data, as: UTF8.self) + "[0])"
     }
 
-    private static func askWhat() -> Choice? {
-        switch alert("Send this recording to CollectivIQ?",
-                     "Raw: the transcript exactly as heard.\nAI version: your prompt + the transcript with words and logic fixed.\nBoth: raw first, then the AI version, in the same chat.",
-                     ["AI version", "Raw", "Both"]) {
-        case 0: return .ai
-        case 1: return .raw
-        case 2: return .both
-        default: return nil
-        }
-    }
-
-    private static func askWhere() -> Destination? {
-        let ddr = Store.shared.prefs.ciqDDRName.trimmingCharacters(in: .whitespaces)
-        if ddr.isEmpty { return .chat }
-        switch alert("Where should it go?",
-                     "CIQ Chat: a new CollectivIQ chat (answered by \(Store.shared.prefs.ciqModel.isEmpty ? "All · Auto" : Store.shared.prefs.ciqModel)).\nDDR: your \(ddr) DDR's chat.",
-                     ["CIQ Chat", "DDR: \(ddr)"]) {
-        case 0: return .chat
-        case 1: return .ddr(ddr)
-        default: return nil
-        }
-    }
+    static let routeSteps = #"""
+(function(notetaker){
+  var S = window.__jsiroute || (window.__jsiroute = {t: Date.now()});
+  if (location.pathname.indexOf('/login') === 0) return 'login';
+  function txt(e){ return (e && (e.innerText || e.textContent) || '').trim(); }
+  function norm(s){ return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+  if (!document.querySelector('wa-textarea[data-testid=chat-input], [data-testid=ddr-dm-entry], [data-testid=chat-rail-persona-button]')) return 'wait';
+  var names = Array.prototype.slice.call(document.querySelectorAll('[data-testid=ddr-dm-entry], [data-testid=chat-rail-persona-button]'))
+    .map(function(e){ return (txt(e.querySelector('.name')) || e.getAttribute('title') || e.getAttribute('aria-label') || txt(e)).split(/[\r\n]/)[0].trim(); })
+    .filter(function(n){ return n.length > 0; });
+  var key = names.join('|');
+  if (key !== S.key) { S.key = key; S.since = Date.now(); }
+  // Give the list time to load fully (DDRs can appear one by one).
+  if (Date.now() - S.t < 3000 || Date.now() - S.since < 2000) return 'wait';
+  if (!names.length) return Date.now() - S.t > 9000 ? 'route:none' : 'wait';
+  var want = norm(notetaker);
+  if (want) {
+    var nt = names.filter(function(n){ return norm(n).indexOf(want) >= 0; })[0];
+    if (nt) return 'route:notetaker:' + nt;
+  }
+  var other = names.filter(function(n){ return !want || norm(n).indexOf(want) < 0; })[0];
+  return other ? 'route:assistant:' + other : 'route:none';
+})
+"""#
 
     /// Opens a DDR's direct-message chat, pastes the message and presses Send.
     static func ddrScript(for msg: String, ddr: String) -> String {
@@ -154,22 +131,21 @@ enum CollectivIQ {
 
     /// Picks the model (All · Auto → All Selected → only <model> → Apply Changes), then fills the
     /// chat box and presses Send. Returns "login", "wait", "model:…", "filled" or "sent".
-    static func script(for msg: String) -> String {
-        let model = Store.shared.prefs.ciqModel
-        let data = (try? JSONSerialization.data(withJSONObject: [msg, model])) ?? Data("[\"\",\"\"]".utf8)
+    static func script(for msg: String, models: [String] = CiqRoute.chatModels) -> String {
+        let data = (try? JSONSerialization.data(withJSONObject: [msg, models] as [Any])) ?? Data("[\"\",[]]".utf8)
         let args = String(decoding: data, as: UTF8.self)
         return "(" + Self.steps + ")(" + args + "[0], " + args + "[1])"
     }
 
     /// Clears the per-chat progress kept in the page (call after loading a new chat).
-    static let reset = "window.__jsi = undefined; window.__jsiddr = undefined; 'ok'"
+    static let reset = "window.__jsi = undefined; window.__jsiddr = undefined; window.__jsiroute = undefined; 'ok'"
 
     static let steps = #"""
-(function(msg, model){
-  var S = window.__jsi || (window.__jsi = {modelDone: !model});
+(function(msg, models){
+  var S = window.__jsi || (window.__jsi = {modelDone: !models || !models.length});
   if (location.pathname.indexOf('/login') === 0) return 'login';
   function txt(e){ return (e && (e.innerText || e.textContent) || '').trim(); }
-  // 1. Pick the model: All · Auto -> All Selected -> only <model> -> Apply Changes
+  // 1. Pick the models: All · Auto -> All Selected -> only the wanted models -> Apply Changes
   if (!S.modelDone) {
     var modal = document.querySelector('app-model-config-modal [role=dialog], app-model-config-modal .modal');
     if (!modal) {
@@ -180,14 +156,19 @@ enum CollectivIQ {
     }
     var chips = Array.prototype.slice.call(modal.querySelectorAll('button.model-chip'));
     if (!chips.length) return 'wait';
-    var want = model.toLowerCase();
-    var target = chips.filter(function(c){ return txt(c.querySelector('.provider') || c).toLowerCase().indexOf(want) >= 0; })[0];
-    if (!target) { S.modelDone = true; var x = modal.querySelector('.plain-btn, [aria-label="Close modal"]'); if (x) x.click(); return 'model:missing'; }
+    var targets = [];
+    models.forEach(function(m){
+      var w = m.toLowerCase();
+      var c = chips.filter(function(c){ return targets.indexOf(c) < 0 && txt(c.querySelector('.provider') || c).toLowerCase().indexOf(w) >= 0; })[0];
+      if (c) targets.push(c);
+    });
+    if (!targets.length) { S.modelDone = true; var x = modal.querySelector('.plain-btn, [aria-label="Close modal"]'); if (x) x.click(); return 'model:missing'; }
     var all = modal.querySelector('button.text-btn');
     if (!S.cleared && all && /all selected/i.test(txt(all))) { S.cleared = true; all.click(); return 'model:all-selected'; }
     S.cleared = true;
-    if (!target.classList.contains('is-selected')) { target.click(); return 'model:pick'; }
-    var others = chips.filter(function(c){ return c !== target && c.classList.contains('is-selected') && !c.disabled; });
+    var pick = targets.filter(function(c){ return !c.classList.contains('is-selected'); })[0];
+    if (pick) { pick.click(); return 'model:pick'; }
+    var others = chips.filter(function(c){ return targets.indexOf(c) < 0 && c.classList.contains('is-selected') && !c.disabled; });
     if (others.length) { others[0].click(); return 'model:trim'; }
     var apply = modal.querySelector('button.apply-btn');
     if (apply && !apply.disabled) { S.modelDone = true; apply.click(); return 'model:apply'; }

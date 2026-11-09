@@ -149,14 +149,15 @@ After each recording, Just Say It can hand the transcript to **CollectivIQ**, in
 
 1. On the **CollectivIQ** page (Mac) or in the **Note Taker** tab (Windows), click **Sign in to CollectivIQ** and sign in once with your own account. Tick **Remember me**.
 2. Turn on **After each Note Taker recording, send my prompt + the transcript to CollectivIQ**.
-3. When a recording stops, Just Say It asks:
-   - **What to send:** **Raw** (exactly as heard), **AI version** (your prompt + the transcript with words and logic fixed) or **Both** (raw first, then the AI version, in the same chat).
-   - **Where:** **CIQ Chat** (a new chat) or your **DDR** (for example **Notetaker**). Set the DDR name in the CollectivIQ settings.
+3. When a recording stops, it's sent right away – no questions – following this rule, based on the DDRs you have in CollectivIQ:
+   - **You have a DDR called Notetaker** → the **raw transcript** (exactly as heard) goes to it.
+   - **No Notetaker DDR, but another DDR (your assistant)** → the **AI version** (your prompt + the transcript with words and logic fixed) goes to the first one.
+   - **No DDR at all** → the **AI version** goes to a new **CIQ Chat**, answered by **Gemini** and **Nemotron**.
 
-   It's pasted and sent for you.
+   Just Say It checks your DDRs every time it sends, so it adapts by itself when you add or remove one. The Notetaker name can be changed in the CollectivIQ settings.
 4. A notification says your notes are **syncing and being processed inside CollectivIQ**, and another says when everything has been **sent**.
 
-**Model and preview:** before pasting, Just Say It opens **All · Auto**, clicks **All Selected**, keeps only the model you chose (**Nemotron** by default) and clicks **Apply Changes**. With **Show a live preview while sending** on (the default) you can watch every step; turn it off to send invisibly.
+**Models and preview:** for CIQ Chat, Just Say It opens **All · Auto**, clicks **All Selected**, keeps only **Gemini** and **Nemotron** and clicks **Apply Changes**. With **Show a live preview while sending** on (the default) you can watch every step; turn it off to send invisibly.
 
 The built-in prompt asks for a **16-section meeting analysis**: metadata, participants, how it started, the chronological flow, key points, decisions, open questions, risks, blockers, solutions, resolved issues, timelines, action items (Action → Owner → Due Date), key quotes, how it ended and an overall assessment. You can edit it, or click **Reset to the standard meeting prompt** to restore it. **Send my last note now** sends any saved note on demand.
 
@@ -204,7 +205,7 @@ Then turn on **Join my calendar calls automatically**. The first time you join a
 
 **No administrator password needed.** Just Say It installs and runs for your Windows account only, so it works on work PCs and normal (non-admin) accounts.
 
-**Easiest:** download **`JustSayIt-Setup-2.5.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
+**Easiest:** download **`JustSayIt-Setup-2.6.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
 
 **Or** open PowerShell and paste:
 
