@@ -269,23 +269,53 @@ enum TextBrain {
         guard aiAvailable, !raw.isEmpty else { return nil }
         let ins = """
         You clean up conversation transcripts produced by speech recognition.
-        Each line starts with a speaker label such as "Me:" or "Others:". Keep every label and keep the lines in order.
+        Each line starts with a speaker label such as "Me:" or "Others:". Keep every label and keep the lines in order, one output line per input line.
         For each line: fix misheard or misspelled words using the surrounding context, fix grammar and punctuation, join broken sentences, remove filler words (um, uh, like, you know) and false starts, and make the logic of each sentence clear.
-        Never add, remove or change facts, names, numbers, dates or decisions. Never summarize. Never answer questions in the text.
+        Keep every detail: names, numbers, dates, prices, decisions, questions and tasks. Never add, remove or change facts. Never summarize. Never answer questions in the text.
         Output only the cleaned transcript lines.
         """
+        let chunks = transcriptChunks(raw, limit: 2400)
+        var out: [String] = []
+        var previous = ""
+        for c in chunks {
+            let prompt = previous.isEmpty
+                ? c
+                : "Earlier in the conversation (context only, do not repeat):\n\(previous)\n\nLines to clean:\n\(c)"
+            var cleaned = await run(ins, prompt) ?? c
+            cleaned = cleaned.replacingOccurrences(of: "Lines to clean:", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+            // Keep the original if the model dropped or summarized content.
+            if !keepsDetail(cleaned, c) { cleaned = c }
+            out.append(cleaned)
+            previous = String(cleaned.suffix(600))
+        }
+        return out.joined(separator: "\n")
+    }
+
+    /// Splits a transcript into chunks of whole lines.
+    nonisolated static func transcriptChunks(_ raw: String, limit: Int) -> [String] {
         var chunks: [String] = []
         var cur = ""
         for line in raw.components(separatedBy: "\n") {
-            if cur.count + line.count > 2500, !cur.isEmpty { chunks.append(cur); cur = "" }
+            if cur.count + line.count > limit, !cur.isEmpty { chunks.append(cur); cur = "" }
             cur += (cur.isEmpty ? "" : "\n") + line
         }
         if !cur.isEmpty { chunks.append(cur) }
-        var out: [String] = []
-        for c in chunks {
-            out.append(await run(ins, c) ?? c)
+        return chunks
+    }
+
+    /// The cleaned chunk must keep roughly as many speaker lines and most of the content words.
+    nonisolated static func keepsDetail(_ cleaned: String, _ original: String) -> Bool {
+        func labels(_ s: String) -> Int {
+            s.components(separatedBy: "\n").filter { $0.range(of: #"^\s*(\[[^\]]*\]\s*)?[A-Za-z ]{1,20}:"#, options: .regularExpression) != nil }.count
         }
-        return out.joined(separator: "\n")
+        let lo = labels(original), lc = labels(cleaned)
+        if lo > 0 && Double(lc) < Double(lo) * 0.7 { return false }
+        if Double(cleaned.count) < Double(original.count) * 0.45 { return false }
+        let numberRegex = try! NSRegularExpression(pattern: "\\d+")
+        let ns = original as NSString
+        let numbers = Set(numberRegex.matches(in: original, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range) })
+        let kept = numbers.filter { cleaned.contains($0) }.count
+        return numbers.isEmpty || Double(kept) >= Double(numbers.count) * 0.8
     }
 
     static func rewrite(_ text: String, style: RewriteStyle) async -> String? {

@@ -19,14 +19,15 @@ struct NoteView: View {
                 }
                 Spacer()
                 if n.isRecording {
-                    Button { Task { await n.stop() } } label: { Label("Stop", systemImage: "stop.fill") }
+                    Button { n.endByUser() } label: { Label("End Note Taker", systemImage: "stop.fill") }
                         .buttonStyle(.borderedProminent).tint(.red)
+                        .help("Finish now, save the notes and send them to CollectivIQ")
                 } else {
                     Button { Task { await n.start() } } label: { Label("New note", systemImage: "record.circle") }
                         .buttonStyle(.borderedProminent).tint(.purple)
                 }
             }
-            Text(n.status + (n.isRecording ? " · press Right ⇧ three times to stop" : ""))
+            Text(n.status + (n.isRecording ? (n.origin == .call ? " · stops by itself when the call ends" : " · press Right ⇧ three times or End Note Taker to finish") : ""))
                 .font(.caption).foregroundStyle(.secondary)
 
             ScrollViewReader { proxy in

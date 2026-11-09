@@ -2,6 +2,17 @@
 
 All notable changes to **Just Say It**, an original app designed and built by **Stefano Roman Gunness**.
 
+## 2.4 – 2026-11-09
+
+### Every call, recorded from start to finish
+- **16 call apps** now start the Note Taker automatically: Microsoft Teams, Google Meet, Zoom, FaceTime, Cisco Webex, Slack Huddles, Discord, Skype, Whereby, Jitsi Meet, RingCentral (and RingCentral Video), GoTo Meeting, Zoho Meeting, Signal, WhatsApp and Telegram. Desktop apps and web calls.
+- **Nothing stops the recording until the call that started it ends**: not muting, not quiet moments, not the calendar end time and not another meeting starting. A call ends when its app has used neither the microphone nor the speakers for 45 seconds.
+- New **End Note Taker** button (Note Taker window, menu bar / tray, Meetings settings). After you end a call's notes, that same call isn't recorded again.
+- **Automatic sending:** when a call ends or you press End Note Taker, the notes go to CollectivIQ immediately with no questions. Pick what (Both / AI version / Raw) and where (DDR / CIQ Chat) once in settings.
+- **More detailed smart transcript:** each part is cleaned with the context of what came before, and checked so no lines, names or numbers are lost. Long calls are summarized part by part, then combined, so nothing in the middle is skipped.
+- Calendar auto-join never interrupts a recording in progress.
+- Turn each call app on or off in **Meetings › Record every live call automatically**.
+
 ## 2.3 – 2026-11-06
 
 ### CollectivIQ: choose what to send, and where

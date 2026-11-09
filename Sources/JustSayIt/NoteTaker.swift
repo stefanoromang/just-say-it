@@ -27,6 +27,12 @@ final class NoteTaker: ObservableObject {
     static let shared = NoteTaker()
 
     @Published private(set) var isRecording = false
+    /// True while the microphone and speech model are being set up (before isRecording).
+    @Published private(set) var isStarting = false
+    /// Number of finished recordings still writing their smart transcript / summary.
+    @Published private(set) var finishing = 0
+    /// Recording, starting, or still saving a finished one.
+    var isBusy: Bool { isRecording || isStarting || finishing > 0 }
     @Published private(set) var lines: [NoteLine] = []
     @Published private(set) var live: [String: String] = [:]
     @Published private(set) var startedAt: Date?
@@ -58,25 +64,36 @@ final class NoteTaker: ObservableObject {
     private init() { refreshSaved() }
 
     func toggle() {
-        if isRecording { Task { await stop() } } else { Task { await start() } }
+        if isRecording { endByUser() } else { Task { await start() } }
+    }
+
+    /// The "End Note Taker" button: the only manual way to finish a call recording.
+    func endByUser() {
+        if origin == .call { CallWatcher.shared.endByUser() } else { Task { await stop(sendImmediately: true) } }
     }
 
     // MARK: Start / stop
 
     /// Starts notes for a calendar meeting (title and attendees go into the note).
-    func start(meeting m: UpcomingMeeting, origin o: Origin = .calendar) async {
+    @discardableResult
+    func start(meeting m: UpcomingMeeting, origin o: Origin = .calendar) async -> Bool {
+        guard !isRecording, !isStarting else { return false }
         meeting = m
         origin = o
-        await start(keepMeeting: true)
+        return await start(keepMeeting: true)
     }
 
-    func start() async {
+    @discardableResult
+    func start() async -> Bool {
+        guard !isRecording, !isStarting else { return false }
         origin = .manual
-        await start(keepMeeting: false)
+        return await start(keepMeeting: false)
     }
 
-    private func start(keepMeeting: Bool) async {
-        guard !isRecording else { return }
+    private func start(keepMeeting: Bool) async -> Bool {
+        guard !isRecording, !isStarting else { return false }
+        isStarting = true
+        defer { isStarting = false }
         if !keepMeeting { meeting = nil }
         let store = Store.shared
         let locale = Locale(identifier: store.prefs.localeID)
@@ -101,13 +118,14 @@ final class NoteTaker: ObservableObject {
             micPipe = mic
 
             // The other side of a call (computer audio). Needs Screen Recording permission.
+            // A failure here never stops the recording of your microphone.
             if store.prefs.noteCaptureSystemAudio && ContextReader.hasScreenAccess {
                 let sys = TranscriptPipe()
                 wire(sys, speaker: "Others")
-                try await sys.start(locale: locale)
-                let cap = SystemAudioCapture()
-                cap.onBuffer = { sys.feed($0) }
                 do {
+                    try await sys.start(locale: locale)
+                    let cap = SystemAudioCapture()
+                    cap.onBuffer = { sys.feed($0) }
                     try await cap.start()
                     sysPipe = sys
                     sysCapture = cap
@@ -118,7 +136,7 @@ final class NoteTaker: ObservableObject {
         } catch {
             status = "Couldn't start: \(error.localizedDescription)"
             await teardown()
-            return
+            return false
         }
 
         startedAt = Date()
@@ -128,34 +146,72 @@ final class NoteTaker: ObservableObject {
         NoteWindow.shared.show()
         Controller.shared.overlay.show(.noteTaker)
         if store.prefs.playSounds { NSSound(named: "Hero")?.play() }
+        return true
     }
 
-    func stop() async {
+    /// Finishes the recording. With `sendImmediately` (call ended / End Note Taker) the notes go to
+    /// CollectivIQ straight away using the saved defaults, without any questions.
+    func stop(sendImmediately: Bool = false) async {
         guard isRecording else { return }
         isRecording = false
+        finishing += 1
+        defer { finishing -= 1 }
         status = "Finishing transcript…"
         Controller.shared.overlay.show(.hidden)
         await teardown()
         if Store.shared.prefs.playSounds { NSSound(named: "Bottle")?.play() }
 
-        guard !lines.isEmpty else {
+        // From here on work on a copy, so a new recording that starts meanwhile can't mix with this one.
+        var note = snapshot()
+        note.endedAt = Date()
+        fileURL = nil
+        guard !note.lines.isEmpty else {
             status = "Nothing was heard."
-            if let f = fileURL { try? FileManager.default.removeItem(at: f) }
-            fileURL = nil
+            if let f = note.fileURL {
+                let base = f.deletingPathExtension().path
+                for path in [f.path, base + " - Raw.txt", base + " - Smart.txt"] { try? FileManager.default.removeItem(atPath: path) }
+            }
             return
         }
-        status = "Writing the smart transcript…"
-        smartTranscript = await TextBrain.smartTranscript(transcriptText(timestamps: false))
-        writeFile(summary: nil)
-        status = "Writing summary…"
-        let summary = await summarize()
-        writeFile(summary: summary)
-        lastNoteURL = fileURL
+        Self.write(note, summary: nil)
+        setStatus("Writing the smart transcript…")
+        note.smart = await TextBrain.smartTranscript(note.plainText)
+        smartTranscript = note.smart
+        Self.write(note, summary: nil)
+        setStatus("Writing summary…")
+        let summary = await summarize(note)
+        Self.write(note, summary: summary)
+        lastNoteURL = note.fileURL
         refreshSaved()
-        status = "Saved to Documents › Just Say It Notes"
-        CollectivIQ.deliver(title: meeting?.title,
-                            raw: transcriptText(timestamps: false),
-                            smart: smartTranscript)
+        setStatus("Saved to Documents › Just Say It Notes")
+        CollectivIQ.deliver(title: note.meeting?.title,
+                            raw: note.plainText,
+                            smart: note.smart,
+                            automatic: sendImmediately && Store.shared.prefs.ciqAutoSend)
+    }
+
+    /// Status of a finishing recording; never overwrites the status of a new one that's running.
+    private func setStatus(_ s: String) {
+        if !isRecording && !isStarting { status = s }
+    }
+
+    /// Everything that goes into a note file.
+    struct NoteSnapshot {
+        var lines: [NoteLine]
+        var meeting: UpcomingMeeting?
+        var fileURL: URL?
+        var startedAt: Date
+        var endedAt: Date?
+        var context: String
+        var smart: String?
+
+        var plainText: String { lines.map { "\($0.speaker): \($0.text)" }.joined(separator: "\n") }
+        var rawTranscript: String { lines.map { "[\(NoteTaker.stampText($0.time))] \($0.speaker): \($0.text)" }.joined(separator: "\n") }
+    }
+
+    private func snapshot() -> NoteSnapshot {
+        NoteSnapshot(lines: lines, meeting: meeting, fileURL: fileURL, startedAt: startedAt ?? Date(), endedAt: nil,
+                     context: context, smart: smartTranscript)
     }
 
     private func teardown() async {
@@ -191,11 +247,11 @@ final class NoteTaker: ObservableObject {
 
     // MARK: Summary (on-device Apple Intelligence)
 
-    private func summarize() async -> String? {
+    private func summarize(_ note: NoteSnapshot) async -> String? {
         guard TextBrain.aiAvailable else { return nil }
-        var transcript = transcriptText(timestamps: false)
-        if let m = meeting { transcript = "Meeting: \(m.title)\nAttendees: \(m.attendees.joined(separator: ", "))\n\n" + transcript }
-        if transcript.count > 9000 { transcript = String(transcript.prefix(4500)) + "\n…\n" + String(transcript.suffix(4500)) }
+        let base = note.smart ?? note.plainText
+        var header = ""
+        if let m = note.meeting { header = "Meeting: \(m.title)\nAttendees: \(m.attendees.joined(separator: ", "))\n\n" }
         let ins = """
         You write meeting notes from a transcript. Lines starting with "Me:" are the user; "Others:" is everyone else.
         Write in Markdown with exactly these sections:
@@ -210,8 +266,23 @@ final class NoteTaker: ObservableObject {
         List every task anyone agreed to do as an action item, including tasks for people other than the speaker.
         Use only information from the transcript. Do not invent names, dates or numbers.
         """
-        let session = LanguageModelSession(model: SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations), instructions: ins)
-        return try? await session.respond(to: transcript).content
+        func ask(_ text: String) async -> String? {
+            let session = LanguageModelSession(model: SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations), instructions: ins)
+            return try? await session.respond(to: header + text).content
+        }
+        if base.count <= 7000 { return await ask(base) }
+        // Long call: note each part, then combine, so nothing in the middle is lost.
+        var partials: [String] = []
+        for part in TextBrain.transcriptChunks(base, limit: 6000) {
+            if let n = await ask(part) { partials.append(n) }
+        }
+        guard !partials.isEmpty else { return nil }
+        if partials.count == 1 { return partials[0] }
+        let combine = """
+        Combine these partial notes from consecutive parts of one meeting into a single set of notes with exactly these sections: ## Summary, ## Key points, ## Decisions, ## Action items. Merge duplicates, keep every distinct decision and action item, and keep them in the order they happened. Do not invent anything.
+        """
+        let session = LanguageModelSession(model: SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations), instructions: combine)
+        return (try? await session.respond(to: partials.joined(separator: "\n\n---\n\n")).content) ?? partials.joined(separator: "\n\n")
     }
 
     // MARK: Files
@@ -224,7 +295,13 @@ final class NoteTaker: ObservableObject {
             let safe = m.title.components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|")).joined(separator: "-")
             title = String(safe.prefix(60)).trimmingCharacters(in: .whitespaces)
         }
-        let base = "\(f.string(from: Date())) \(title)"
+        // Never overwrite an earlier note (two calls with the same name in the same minute).
+        var base = "\(f.string(from: Date())) \(title)"
+        var n = 2
+        while FileManager.default.fileExists(atPath: Self.notesDir.appendingPathComponent(base + ".txt").path) {
+            base = "\(f.string(from: Date())) \(title) (\(n))"
+            n += 1
+        }
         fileURL = Self.notesDir.appendingPathComponent(base + ".txt")
         smartTranscript = nil
         writeFile(summary: nil)
@@ -236,35 +313,43 @@ final class NoteTaker: ObservableObject {
         }.joined(separator: timestamps ? "\n\n" : "\n")
     }
 
-    func stamp(_ t: Double) -> String {
-        let s = Int(t)
+    func stamp(_ t: Double) -> String { Self.stampText(t) }
+
+    nonisolated static func stampText(_ t: Double) -> String {
+        let s = Int(t.isFinite ? max(0, t) : 0)
         return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%02d:%02d", s / 60, s % 60)
     }
 
     /// Plain-text note: header, summary, smart transcript and raw transcript.
     /// Also writes "<name> - Raw.txt" and "<name> - Smart.txt" next to it.
     private func writeFile(summary: String?) {
-        guard let url = fileURL else { return }
+        guard isRecording || isStarting else { return }
+        Self.write(snapshot(), summary: summary)
+    }
+
+    private static func write(_ note: NoteSnapshot, summary: String?) {
+        guard let url = note.fileURL else { return }
         let df = DateFormatter()
         df.dateStyle = .full
         df.timeStyle = .short
-        let start = startedAt ?? Date()
-        let duration = Date().timeIntervalSince(start)
+        let start = note.startedAt
+        let duration = (note.endedAt ?? Date()).timeIntervalSince(start)
         let rule = String(repeating: "=", count: 60)
-        var header = (meeting?.title ?? "Note – \(df.string(from: start))") + "\n"
-        header += "Recorded with Just Say It · \(df.string(from: start)) · \(stamp(duration)) · \(context)\n"
-        if let m = meeting, !m.attendees.isEmpty { header += "Attendees: " + m.attendees.joined(separator: ", ") + "\n" }
+        var header = (note.meeting?.title ?? "Note – \(df.string(from: start))") + "\n"
+        header += "Recorded with Just Say It · \(df.string(from: start)) · \(stampText(duration)) · \(note.context)\n"
+        if let m = note.meeting, !m.attendees.isEmpty { header += "Attendees: " + m.attendees.joined(separator: ", ") + "\n" }
+        let raw = note.rawTranscript
 
         var txt = header + "\n"
         if let summary { txt += "\(rule)\nSUMMARY\n\(rule)\n" + Self.plain(summary) + "\n\n" }
-        if let smart = smartTranscript { txt += "\(rule)\nSMART TRANSCRIPT (words and logic fixed)\n\(rule)\n" + smart + "\n\n" }
-        txt += "\(rule)\nRAW TRANSCRIPT (exactly as heard)\n\(rule)\n" + rawTranscript() + "\n"
+        if let smart = note.smart { txt += "\(rule)\nSMART TRANSCRIPT (words and logic fixed)\n\(rule)\n" + smart + "\n\n" }
+        txt += "\(rule)\nRAW TRANSCRIPT (exactly as heard)\n\(rule)\n" + raw + "\n"
         try? txt.write(to: url, atomically: true, encoding: .utf8)
 
         let base = url.deletingPathExtension().path
-        try? (header + "\nRAW TRANSCRIPT (exactly as heard)\n\n" + rawTranscript() + "\n")
+        try? (header + "\nRAW TRANSCRIPT (exactly as heard)\n\n" + raw + "\n")
             .write(toFile: base + " - Raw.txt", atomically: true, encoding: .utf8)
-        if let smart = smartTranscript {
+        if let smart = note.smart {
             try? (header + "\nSMART TRANSCRIPT (words and logic fixed)\n\n" + smart + "\n")
                 .write(toFile: base + " - Smart.txt", atomically: true, encoding: .utf8)
         }

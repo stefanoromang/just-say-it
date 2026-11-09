@@ -5,7 +5,7 @@ import AppKit
 import SwiftUI
 
 enum OverlayState: Equatable {
-    case hidden, listening(scribe: Bool, handsFree: Bool), thinking, done, error(String), noteTaker
+    case hidden, listening(scribe: Bool, handsFree: Bool), thinking, done, sent, error(String), noteTaker
 }
 
 @MainActor
@@ -59,7 +59,7 @@ struct OverlayView: View {
                 .foregroundStyle(scribe ? .purple : .red)
         case .thinking:
             ProgressView().controlSize(.small).tint(.white)
-        case .done:
+        case .done, .sent:
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
         case .noteTaker:
             Circle().fill(Color(red: 1, green: 0.16, blue: 0.47)).frame(width: 10, height: 10)
@@ -90,6 +90,8 @@ struct OverlayView: View {
             Text("Polishing…").font(.caption).foregroundStyle(.white)
         case .done:
             Text("Inserted").font(.caption).foregroundStyle(.white)
+        case .sent:
+            Text("Sent to CollectivIQ").font(.caption).foregroundStyle(.white)
         case .noteTaker:
             Text("JustSayIt - Note taker is active").font(.caption.bold())
                 .foregroundStyle(Ticker.shared.blink ? Color(red: 1, green: 0.16, blue: 0.47) : .white)
@@ -127,6 +129,7 @@ final class OverlayController {
         panel.orderFrontRegardless()
         switch s {
         case .done: hide(after: 0.7)
+        case .sent: hide(after: 2.0)
         case .error: hide(after: 2.5)
         case .hidden:
             if NoteTaker.shared.isRecording { model.state = .noteTaker } else { panel.orderOut(nil) }

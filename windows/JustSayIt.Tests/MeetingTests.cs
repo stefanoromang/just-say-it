@@ -75,26 +75,100 @@ public class CalendarParseTests
     }
 }
 
-/// Live-call detection helpers (same logic as CallApps in the Windows app).
-public class LiveCallTitleTests
+/// Live-call detection (the app's CallApps list).
+public class LiveCallTests
 {
-    static MeetingPlatform? ForTitle(string title)
-    {
-        var t = title.ToLowerInvariant();
-        if (t.StartsWith("meet - ") || t.StartsWith("meet – ") || t.Contains("google meet") || t.Contains("meet.google.com")) return MeetingPlatform.Meet;
-        if (t.Contains("microsoft teams")) return MeetingPlatform.Teams;
-        if (t.Contains("zoom meeting") || t.Contains("zoom workplace") || t.Contains("zoom webinar")) return MeetingPlatform.Zoom;
-        return null;
-    }
-
     [Theory]
-    [InlineData("Meet - abc-defg-hij - Google Chrome", MeetingPlatform.Meet)]
-    [InlineData("Weekly sync | Microsoft Teams", MeetingPlatform.Teams)]
-    [InlineData("Zoom Meeting", MeetingPlatform.Zoom)]
-    public void DetectsCallWindows(string title, MeetingPlatform expected) => Assert.Equal(expected, ForTitle(title));
+    [InlineData("Meet - abc-defg-hij - Google Chrome", "meet")]
+    [InlineData("Weekly sync | Microsoft Teams", "teams")]
+    [InlineData("Zoom Meeting", "zoom")]
+    [InlineData("Standup - Webex - Google Chrome", "webex")]
+    [InlineData("Huddle with Ana - Slack", "slack")]
+    [InlineData("MyStandup | Jitsi Meet - Microsoft Edge", "jitsi")]
+    [InlineData("stefano-room | Whereby - Google Chrome", "whereby")]
+    [InlineData("Zoho Meeting - Google Chrome", "zoho")]
+    [InlineData("GoTo Meeting - Brave", "goto")]
+    public void DetectsCallWindows(string title, string expected) => Assert.Equal(expected, CallApps.ServiceForTitle(title)?.Id);
 
     [Theory]
     [InlineData("Inbox (3) - Gmail - Google Chrome")]
     [InlineData("YouTube - Google Chrome")]
-    public void IgnoresOtherWindows(string title) => Assert.Null(ForTitle(title));
+    [InlineData("Signal - Google Chrome")]
+    public void IgnoresOtherWindows(string title) => Assert.Null(CallApps.ServiceForTitle(title));
+
+    [Theory]
+    [InlineData(@"C:\Users\a\AppData\Local\Microsoft\WindowsApps\MSTeams_8wekyb3d8bbwe\ms-teams.exe", "teams")]
+    [InlineData("MSTeams_8wekyb3d8bbwe", "teams")]
+    [InlineData(@"C:\Users\a\AppData\Roaming\Zoom\bin\Zoom.exe", "zoom")]
+    [InlineData(@"C:\Program Files\Cisco Spark\CiscoCollabHost.exe", "webex")]
+    [InlineData(@"C:\Users\a\AppData\Local\slack\app-4.41.105\slack.exe", "slack")]
+    [InlineData(@"C:\Users\a\AppData\Local\Discord\app-1.0.9\Discord.exe", "discord")]
+    [InlineData("Microsoft.SkypeApp_kzf8qxf38zg5c", "skype")]
+    [InlineData(@"C:\Program Files\RingCentral\RingCentral.exe", "ringcentral")]
+    [InlineData(@"C:\Users\a\AppData\Local\GoTo\GoTo.exe", "goto")]
+    [InlineData(@"C:\Users\a\AppData\Local\Programs\signal-desktop\Signal.exe", "signal")]
+    [InlineData("5319275A.WhatsAppDesktop_cv1g1gvanyjgm", "whatsapp")]
+    [InlineData(@"C:\Users\a\AppData\Roaming\Telegram Desktop\Telegram.exe", "telegram")]
+    [InlineData(@"C:\Users\a\AppData\Local\Programs\Jitsi Meet\Jitsi Meet.exe", "jitsi")]
+    public void DetectsCallApps(string exe, string expected) => Assert.Equal(expected, CallApps.Service(exe)?.Id);
+
+    [Theory]
+    [InlineData(@"C:\Program Files\Google\Chrome\Application\chrome.exe")]
+    [InlineData(@"C:\Windows\System32\SoundRecorder.exe")]
+    [InlineData(@"C:\Program Files\Spotify\Spotify.exe")]
+    public void NonCallAppsAreIgnored(string exe) => Assert.Null(CallApps.Service(exe));
+
+    [Fact]
+    public void AllSixteenApps() => Assert.True(CallApps.Services.Length >= 16 && CallApps.Services.Select(s => s.Id).Distinct().Count() == CallApps.Services.Length);
+
+    [Fact]
+    public void CleansTitles()
+    {
+        Assert.Equal("abc-defg-hij", CallApps.CleanTitle("Meet - abc-defg-hij - Google Chrome", CallApps.ById("meet")!));
+        Assert.Equal("Weekly sync", CallApps.CleanTitle("Weekly sync | Microsoft Teams", CallApps.ById("teams")!));
+        Assert.Equal("Zoom call", CallApps.CleanTitle("Zoom Workplace", CallApps.ById("zoom")!));
+    }
+
+    [Fact]
+    public void ServiceToggles()
+    {
+        var p = new Prefs();
+        Assert.True(p.IsCallServiceEnabled("discord"));
+        p.SetCallServiceEnabled("discord", false);
+        p.SetCallServiceEnabled("teams", false);
+        Assert.False(p.IsCallServiceEnabled("discord"));
+        Assert.False(p.IsCallServiceEnabled("teams"));
+        Assert.False(p.RecordTeamsCalls);
+        p.SetCallServiceEnabled("discord", true);
+        Assert.True(p.IsCallServiceEnabled("discord"));
+        Assert.True(p.CiqAutoSend);
+        Assert.Equal("both", p.CiqAutoWhat);
+        Assert.Equal("ddr", p.CiqAutoWhere);
+    }
+}
+
+public class SmartTranscriptTests
+{
+    const string Original = "Me: um so the budget is like 4500 dollars\nOthers: ok and the deadline is march 12\nMe: yeah we ship 3 units";
+
+    [Fact]
+    public void KeepsGoodCleanup() => Assert.True(TextBrain.KeepsDetail(
+        "Me: So the budget is 4,500 dollars.\nOthers: OK, and the deadline is March 12.\nMe: Yes, we ship 3 units.".Replace("4,500", "4500"), Original));
+
+    [Fact]
+    public void RejectsSummary() => Assert.False(TextBrain.KeepsDetail("They discussed the budget and deadline.", Original));
+
+    [Fact]
+    public void RejectsLostNumbers() => Assert.False(TextBrain.KeepsDetail(
+        "Me: So the budget is a few thousand dollars.\nOthers: OK, and the deadline is in March.\nMe: Yes, we ship some units.", Original));
+
+    [Fact]
+    public void ChunksKeepWholeLines()
+    {
+        var raw = string.Join("\n", Enumerable.Range(1, 200).Select(i => $"Me: line number {i} with some words in it"));
+        var chunks = TextBrain.TranscriptChunks(raw, 2400);
+        Assert.True(chunks.Count > 1);
+        Assert.All(chunks, c => Assert.True(c.Length <= 2400));
+        Assert.Equal(raw, string.Join("\n", chunks));
+    }
 }

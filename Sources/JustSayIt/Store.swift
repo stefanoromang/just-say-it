@@ -156,6 +156,22 @@ struct Prefs: Codable {
     var ciqEnabled = false
     var ciqModel = "Nemotron"
     var ciqDDRName = "Notetaker"
+    /// Send automatically (no questions) when a call ends or End Note Taker is pressed.
+    var ciqAutoSend = true
+    var ciqAutoWhat = "both"
+    var ciqAutoWhere = "ddr"
+    /// Call services the Note Taker records automatically (ids from CallApps.services).
+    var disabledCallServices: [String] = []
+
+    func isCallServiceEnabled(_ id: String) -> Bool {
+        switch id {
+        case "teams": if !recordTeamsCalls { return false }
+        case "zoom": if !recordZoomCalls { return false }
+        case "meet": if !recordMeetCalls { return false }
+        default: break
+        }
+        return !disabledCallServices.contains(id)
+    }
     var ciqShowPreview = true
     var ciqPrompt = ciqStandardPrompt
 
@@ -197,6 +213,10 @@ struct Prefs: Codable {
         ciqEnabled = (try? c.decode(Bool.self, forKey: .ciqEnabled)) ?? def.ciqEnabled
         ciqModel = (try? c.decode(String.self, forKey: .ciqModel)) ?? def.ciqModel
         ciqDDRName = (try? c.decode(String.self, forKey: .ciqDDRName)) ?? def.ciqDDRName
+        ciqAutoSend = (try? c.decode(Bool.self, forKey: .ciqAutoSend)) ?? def.ciqAutoSend
+        ciqAutoWhat = (try? c.decode(String.self, forKey: .ciqAutoWhat)) ?? def.ciqAutoWhat
+        ciqAutoWhere = (try? c.decode(String.self, forKey: .ciqAutoWhere)) ?? def.ciqAutoWhere
+        disabledCallServices = (try? c.decode([String].self, forKey: .disabledCallServices)) ?? []
         ciqShowPreview = (try? c.decode(Bool.self, forKey: .ciqShowPreview)) ?? def.ciqShowPreview
         ciqPrompt = (try? c.decode(String.self, forKey: .ciqPrompt)) ?? def.ciqPrompt
         // Upgrade people still on the old short default to the standard meeting prompt.

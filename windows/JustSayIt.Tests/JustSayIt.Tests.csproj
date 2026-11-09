@@ -13,6 +13,7 @@
     <Compile Include="../JustSayIt/TextBrain.cs" Link="TextBrain.cs" />
     <Compile Include="../JustSayIt/Store.cs" Link="Store.cs" />
     <Compile Include="../JustSayIt/MeetingLinks.cs" Link="MeetingLinks.cs" />
+    <Compile Include="../JustSayIt/CallApps.cs" Link="CallApps.cs" />
   </ItemGroup>
 
   <ItemGroup>

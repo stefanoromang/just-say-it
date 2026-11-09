@@ -15,7 +15,7 @@ enum CollectivIQ {
     static let loginURL = URL(string: "https://collectiviq.ai/login")!
     static let defaultPrompt = ciqStandardPrompt
 
-    enum Choice { case raw, ai, both }
+    enum Choice: String { case raw, ai, both }
 
     /// Where a message goes: a new CIQ chat, or a DDR's direct-message chat (e.g. "Notetaker").
     enum Destination: Equatable { case chat, ddr(String) }
@@ -36,11 +36,21 @@ enum CollectivIQ {
         return s + "\n\n" + raw
     }
 
-    /// Called when a recording is saved: asks what to send and where, then sends in the background.
-    static func deliver(title: String?, raw: String, smart: String?) {
-        guard Store.shared.prefs.ciqEnabled, !raw.isEmpty else { return }
-        guard let choice = askWhat() else { return }
-        guard let dest = askWhere() else { return }
+    /// Called when a recording is saved. With `automatic` (call ended / End Note Taker) it sends right
+    /// away using the saved defaults; otherwise it asks what to send and where.
+    static func deliver(title: String?, raw: String, smart: String?, automatic: Bool = false) {
+        let p = Store.shared.prefs
+        guard p.ciqEnabled, !raw.isEmpty else { return }
+        let choice: Choice
+        let dest: Destination
+        if automatic {
+            choice = Choice(rawValue: p.ciqAutoWhat) ?? .both
+            let ddr = p.ciqDDRName.trimmingCharacters(in: .whitespaces)
+            dest = (p.ciqAutoWhere == "ddr" && !ddr.isEmpty) ? .ddr(ddr) : .chat
+        } else {
+            guard let c = askWhat(), let d = askWhere() else { return }
+            choice = c; dest = d
+        }
         let prompt = Store.shared.prefs.ciqPrompt
         let ai = message(prompt: prompt, title: title, transcript: smart ?? raw)
         let text: String

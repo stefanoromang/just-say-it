@@ -468,7 +468,7 @@ struct NotesPane: View {
                 .foregroundStyle(.secondary)
             HStack {
                 Button { n.toggle() } label: {
-                    Label(n.isRecording ? "Stop Note Taker" : "Start Note Taker", systemImage: n.isRecording ? "stop.fill" : "record.circle")
+                    Label(n.isRecording ? "End Note Taker" : "Start Note Taker", systemImage: n.isRecording ? "stop.fill" : "record.circle")
                 }
                 .buttonStyle(.borderedProminent).tint(n.isRecording ? .red : .purple)
                 Button("Show live window") { NoteWindow.shared.show() }
@@ -511,6 +511,8 @@ struct NotesPane: View {
 struct MeetingsPane: View {
     @ObservedObject var store: Store
     @ObservedObject var aj = AutoJoin.shared
+    @ObservedObject var calls = CallWatcher.shared
+    @ObservedObject var notes = NoteTaker.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -550,19 +552,35 @@ struct MeetingsPane: View {
 
             GroupBox("Record every live call automatically") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Toggle("When a Teams, Zoom or Google Meet call starts, record and transcribe it", isOn: $store.prefs.autoRecordCalls)
-                    HStack(spacing: 18) {
-                        Toggle("Microsoft Teams", isOn: $store.prefs.recordTeamsCalls)
-                        Toggle("Zoom", isOn: $store.prefs.recordZoomCalls)
-                        Toggle("Google Meet", isOn: $store.prefs.recordMeetCalls)
+                    Toggle("When a call starts in any of these apps, record and transcribe it", isOn: $store.prefs.autoRecordCalls)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), alignment: .leading)], alignment: .leading, spacing: 4) {
+                        ForEach(CallApps.services) { svc in
+                            Toggle(svc.name, isOn: Binding(
+                                get: { store.prefs.isCallServiceEnabled(svc.id) },
+                                set: { on in
+                                    switch svc.id {
+                                    case "teams": store.prefs.recordTeamsCalls = on
+                                    case "zoom": store.prefs.recordZoomCalls = on
+                                    case "meet": store.prefs.recordMeetCalls = on
+                                    default: break
+                                    }
+                                    store.prefs.disabledCallServices.removeAll { $0 == svc.id }
+                                    if !on && !["teams", "zoom", "meet"].contains(svc.id) { store.prefs.disabledCallServices.append(svc.id) }
+                                }))
+                        }
                     }
                     .disabled(!store.prefs.autoRecordCalls)
-                    Text("Works for calls you join, answer or start, in the Teams and Zoom apps or in Chrome, Edge, Safari, Brave or Arc. Recording starts a few seconds after the call uses your microphone and stops when the call ends; the transcript is saved (and sent to CollectivIQ if that's on). To record the other people too, allow **Screen Recording** on the Home page.")
+                    Text("Desktop apps and web calls in Chrome, Edge, Safari, Brave, Arc or Firefox. Recording starts a few seconds after a call uses your microphone and **keeps going until that call ends** – muting, other meetings starting or calendar end times never stop it. Press **End Note Taker** to finish it yourself. To record the other people too, allow **Screen Recording** on the Home page.")
                         .font(.caption).foregroundStyle(.secondary)
-                    if let c = CallWatcher.shared.activeCall {
-                        Label("Recording: \(c.title) (\(c.platform.rawValue))", systemImage: "record.circle").foregroundStyle(.red)
-                    } else if !CallWatcher.shared.status.isEmpty {
-                        Text(CallWatcher.shared.status).font(.caption).foregroundStyle(.purple)
+                    if notes.isRecording {
+                        HStack {
+                            Label(calls.activeCall.map { "Recording: \($0.title) (\($0.service.name))" } ?? "Note Taker is recording",
+                                  systemImage: "record.circle").foregroundStyle(.red)
+                            Spacer()
+                            Button("End Note Taker") { notes.endByUser() }.buttonStyle(.borderedProminent).tint(.red)
+                        }
+                    } else if !calls.status.isEmpty {
+                        Text(calls.status).font(.caption).foregroundStyle(.purple)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
@@ -571,7 +589,7 @@ struct MeetingsPane: View {
             GroupBox("2. Automatic joining") {
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle("Join my calendar calls automatically", isOn: $store.prefs.autoJoinEnabled)
-                    Toggle("Start the Note Taker for each call (stops when the meeting ends)", isOn: $store.prefs.autoJoinStartNotes)
+                    Toggle("Start the Note Taker for each call (keeps going until the call ends or you press End Note Taker)", isOn: $store.prefs.autoJoinStartNotes)
                     Picker("Join", selection: $store.prefs.autoJoinLeadSeconds) {
                         Text("At start time").tag(0)
                         Text("1 minute early").tag(60)
@@ -688,6 +706,17 @@ struct CollectivIQPane: View {
                     }
                     Text("After each recording you choose **CIQ Chat** or this **DDR**. Leave empty to always use CIQ Chat.")
                         .font(.caption).foregroundStyle(.secondary)
+                    Toggle("When a call ends or I press End Note Taker, send right away without asking", isOn: $store.prefs.ciqAutoSend)
+                    if store.prefs.ciqAutoSend {
+                        HStack(spacing: 16) {
+                            Picker("Send", selection: $store.prefs.ciqAutoWhat) {
+                                Text("Both").tag("both"); Text("AI version").tag("ai"); Text("Raw").tag("raw")
+                            }.frame(maxWidth: 200)
+                            Picker("To", selection: $store.prefs.ciqAutoWhere) {
+                                Text("DDR: \(store.prefs.ciqDDRName.isEmpty ? "–" : store.prefs.ciqDDRName)").tag("ddr"); Text("CIQ Chat").tag("chat")
+                            }.frame(maxWidth: 240)
+                        }
+                    }
                     Toggle("Show a live preview while sending to CollectivIQ", isOn: $store.prefs.ciqShowPreview)
                     Text(store.prefs.ciqShowPreview ? "The CollectivIQ window stays open so you can watch the model being chosen, the transcript pasted and sent." : "Sending happens invisibly in the background; the window opens only if you need to sign in.")
                         .font(.caption).foregroundStyle(.secondary)

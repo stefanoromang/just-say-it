@@ -26,11 +26,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         MainActor.assumeIsolated { Controller.shared.boot() }
     }
+
+    /// Never lose a recording on quit: finish it, save it and send it first.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        MainActor.assumeIsolated {
+            let notes = NoteTaker.shared
+            guard notes.isBusy || CIQSender.shared.isBusy else { return .terminateNow }
+            Controller.shared.overlay.show(.error("Saving your notes before quitting…"))
+            Task { @MainActor in
+                if notes.isRecording { await notes.stop(sendImmediately: true) }
+                // Wait (up to 5 minutes) for the notes to be written and sent.
+                for _ in 0..<300 where notes.isBusy || CIQSender.shared.isBusy {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+                NSApp.reply(toApplicationShouldTerminate: true)
+            }
+            return .terminateLater
+        }
+    }
 }
 
 struct MenuContent: View {
     @ObservedObject var c: Controller
     @ObservedObject var store: Store
+    @ObservedObject var notes = NoteTaker.shared
+    @ObservedObject var autoJoin = AutoJoin.shared
+    @ObservedObject var updater = Updater.shared
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -41,7 +62,11 @@ struct MenuContent: View {
         Text("Icon colors: cyan ready · pink dictating · purple Scribe · green Note Taker · orange working")
         Divider()
         Button("Start / Stop Dictation") { c.toggleFromMenu() }
-        Button(NoteTaker.shared.isRecording ? "Stop Note Taker" : "Start Note Taker (Right ⇧ ×3)") { c.toggleNotes() }
+        if NoteTaker.shared.isRecording {
+            Button("⏹ End Note Taker and send") { NoteTaker.shared.endByUser() }
+        } else {
+            Button("Start Note Taker (Right ⇧ ×3)") { c.toggleNotes() }
+        }
         Button("Show Note Taker") { NoteWindow.shared.show() }
         Button("CollectivIQ…") {
             NSApp.activate(ignoringOtherApps: true)

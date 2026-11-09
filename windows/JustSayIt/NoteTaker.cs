@@ -18,10 +18,21 @@ public sealed class NoteTaker
     public static NoteTaker Shared { get; } = new();
 
     public bool IsRecording { get; private set; }
+    /// Setting up the microphone and speech model (before IsRecording), or transcribing the last audio after a stop.
+    public bool IsStarting { get; private set; }
+    bool flushing;
+    int finishing;
+    /// Recording, starting, or still saving a finished one.
+    public bool IsBusy => IsRecording || IsStarting || flushing || Volatile.Read(ref finishing) > 0;
     public DateTime StartedAt { get; private set; }
     public string Status { get; private set; } = "";
     public string? LastNotePath { get; private set; }
-    public readonly List<NoteLine> Lines = new();
+    readonly List<NoteLine> Lines = new();
+    DateTime captureStart;
+
+    /// A thread-safe copy of the transcript lines.
+    public NoteLine[] Snapshot() { lock (linesGate) return Lines.ToArray(); }
+    public int LineCount { get { lock (linesGate) return Lines.Count; } }
     /// Transcript rewritten for clarity (filled in when a recording stops).
     public string? SmartTranscript { get; private set; }
     public event Action? Changed;
@@ -60,7 +71,14 @@ public sealed class NoteTaker
 
     public void Toggle()
     {
-        if (IsRecording) _ = Stop(); else _ = Start();
+        if (IsRecording) EndByUser(); else if (!IsBusyStarting) _ = Start();
+    }
+
+    /// The "End Note Taker" button (and Right Shift ×3 while recording): finish now and send right away.
+    public void EndByUser()
+    {
+        if (!IsRecording) return;
+        if (CurrentOrigin == Origin.Call) CallWatcher.Shared.EndByUser(); else _ = Stop(sendImmediately: true);
     }
 
     /// What started the current recording.
@@ -71,26 +89,49 @@ public sealed class NoteTaker
 
     public Task Start(UpcomingMeeting? m) => Start(m, m == null ? Origin.Manual : Origin.Calendar);
 
-    public async Task Start(UpcomingMeeting? m, Origin origin)
+    bool IsBusyStarting => IsStarting || flushing;
+
+    /// Starts a recording. Returns false if one is already running/starting or it couldn't start.
+    public Task<bool> Start(UpcomingMeeting? m, Origin origin) => Ui.Context == null || SynchronizationContext.Current == Ui.Context
+        ? StartCore(m, origin)
+        : RunOnUi(() => StartCore(m, origin));
+
+    static Task<bool> RunOnUi(Func<Task<bool>> f)
     {
-        if (IsRecording) return;
+        var tcs = new TaskCompletionSource<bool>();
+        Ui.Context!.Post(async _ => { try { tcs.SetResult(await f()); } catch (Exception e) { tcs.SetException(e); } }, null);
+        return tcs.Task;
+    }
+
+    async Task<bool> StartCore(UpcomingMeeting? m, Origin origin)
+    {
+        if (IsRecording || IsBusyStarting) return false;
+        IsStarting = true;
+        try { return await StartInner(m, origin); }
+        finally { IsStarting = false; Changed?.Invoke(); }
+    }
+
+    async Task<bool> StartInner(UpcomingMeeting? m, Origin origin)
+    {
         meeting = m;
         CurrentOrigin = origin;
         var p = Store.Shared.Prefs;
-        Lines.Clear();
+        lock (linesGate) Lines.Clear();
         Set("Starting…");
         try
         {
             await Transcriber.EnsureModel(p.Model);
             factory ??= WhisperFactory.FromPath(Transcriber.ModelPath(p.Model));
         }
-        catch (Exception e) { Set("Couldn't load the speech model: " + e.Message); return; }
+        catch (Exception e) { Set("Couldn't load the speech model: " + e.Message); return false; }
 
         context = meeting != null ? $"{MeetingLinks.Name(meeting.Link.Platform)} – {meeting.Title}" : ContextReader.Capture().AppName;
         sources.Clear();
         try
         {
-            AddSource("Me", new WaveIn { WaveFormat = new WaveFormat(Rate, 16, 1), BufferMilliseconds = 100 });
+            captureStart = DateTime.Now;
+            // WaveInEvent works from any thread (WaveIn needs a window message loop).
+            AddSource("Me", new WaveInEvent { WaveFormat = new WaveFormat(Rate, 16, 1), BufferMilliseconds = 100 });
             if (p.NoteCaptureSystemAudio)
             {
 #pragma warning disable CS0618 // system-wide loopback; the replacement API is process-specific
@@ -103,15 +144,17 @@ public sealed class NoteTaker
         {
             Set("Microphone error: " + e.Message);
             StopCaptures();
-            return;
+            return false;
         }
 
-        StartedAt = DateTime.Now;
+        StartedAt = captureStart;
         IsRecording = true;
         Set(sources.Count > 1 ? "Recording you and computer audio" : "Recording your microphone");
         var title = meeting == null ? "Note" : string.Join("-", meeting.Title.Split(Path.GetInvalidFileNameChars())).Trim();
         if (title.Length > 60) title = title[..60];
+        // Never overwrite an earlier note (two calls with the same name in the same minute).
         var name = $"{DateTime.Now:yyyy-MM-dd HH.mm} {title}.txt";
+        for (int i = 2; File.Exists(Path.Combine(NotesDir, name)); i++) name = $"{DateTime.Now:yyyy-MM-dd HH.mm} {title} ({i}).txt";
         SmartTranscript = null;
         filePath = Path.Combine(NotesDir, name);
         WriteFile(null);
@@ -120,36 +163,79 @@ public sealed class NoteTaker
         worker = Task.Run(() => Loop(token));
         if (p.PlaySounds) System.Media.SystemSounds.Asterisk.Play();
         _ = Ui.Run(() => Controller.Shared.Overlay.ShowState(OverlayState.NoteTaker));
+        return true;
     }
 
-    public async Task Stop()
+    /// Finishes the recording. With sendImmediately (call ended / End Note Taker) the notes go to
+    /// CollectivIQ straight away using the saved defaults, without any questions.
+    public async Task Stop(bool sendImmediately = false)
     {
         if (!IsRecording) return;
         IsRecording = false;
-        Set("Finishing transcript…");
-        _ = Ui.Run(() => Controller.Shared.Overlay.ShowState(OverlayState.Hidden));
-        StopCaptures();
-        cts?.Cancel();
-        if (worker != null) { try { await worker; } catch { } }
-        await Flush(force: true);
-        if (Store.Shared.Prefs.PlaySounds) System.Media.SystemSounds.Exclamation.Play();
-
-        if (Lines.Count == 0)
+        flushing = true;
+        Interlocked.Increment(ref finishing);
+        try
         {
-            Set("Nothing was heard.");
-            if (filePath != null) try { File.Delete(filePath); } catch { }
-            return;
+            Set("Finishing transcript…");
+            _ = Ui.Run(() => Controller.Shared.Overlay.ShowState(OverlayState.Hidden));
+            StopCaptures();
+            cts?.Cancel();
+            if (worker != null) { try { await worker; } catch { } }
+            try { await Flush(force: true); } catch { }
+            if (Store.Shared.Prefs.PlaySounds) System.Media.SystemSounds.Exclamation.Play();
+
+            // From here on work on a copy, so a new recording that starts meanwhile can't mix with this one.
+            var note = new Note(Snapshot(), meeting, filePath, StartedAt, DateTime.Now, context);
+            flushing = false;
+            if (note.Lines.Length == 0)
+            {
+                SetIdle("Nothing was heard.");
+                if (note.FilePath != null)
+                {
+                    var b = Path.Combine(Path.GetDirectoryName(note.FilePath)!, Path.GetFileNameWithoutExtension(note.FilePath));
+                    foreach (var f in new[] { note.FilePath, b + " - Raw.txt", b + " - Smart.txt" }) try { File.Delete(f); } catch { }
+                }
+                return;
+            }
+            string? summary = null;
+            try
+            {
+                SetIdle("Writing the smart transcript…");
+                note.Smart = await TextBrain.SmartTranscript(note.PlainText);
+                WriteNote(note, null);
+                SetIdle("Writing summary…");
+                summary = await Summarize(note);
+            }
+            catch { }
+            WriteNote(note, summary);
+            LastNotePath = note.FilePath;
+            if (!IsRecording && !IsStarting) SmartTranscript = note.Smart;
+            SetIdle("Saved to Documents › Just Say It Notes");
+            CollectivIQ.Deliver(note.Meeting?.Title, note.PlainText, note.Smart, sendImmediately && Store.Shared.Prefs.CiqAutoSend);
         }
-        Set("Writing the smart transcript…");
-        SmartTranscript = await TextBrain.SmartTranscript(TranscriptText(false));
-        WriteFile(null);
-        Set("Writing summary…");
-        var summary = await Summarize();
-        WriteFile(summary);
-        LastNotePath = filePath;
-        Set("Saved to Documents › Just Say It Notes");
-        CollectivIQ.Deliver(meeting?.Title, TranscriptText(false), SmartTranscript);
+        finally
+        {
+            flushing = false;
+            Interlocked.Decrement(ref finishing);
+            Changed?.Invoke();
+        }
     }
+
+    /// Everything that goes into a finished note file.
+    sealed class Note(NoteLine[] lines, UpcomingMeeting? meeting, string? filePath, DateTime startedAt, DateTime endedAt, string context)
+    {
+        public NoteLine[] Lines = lines;
+        public UpcomingMeeting? Meeting = meeting;
+        public string? FilePath = filePath;
+        public DateTime StartedAt = startedAt, EndedAt = endedAt;
+        public string Context = context;
+        public string? Smart;
+        public string PlainText => string.Join("\n", Lines.Select(l => $"{l.Speaker}: {l.Text}"));
+        public string Raw => string.Join("\n", Lines.Select(l => $"[{Stamp(l.Time)}] {l.Speaker}: {l.Text}"));
+    }
+
+    /// Status of a finishing recording; never overwrites the status of a new one.
+    void SetIdle(string s) { if (!IsRecording && !IsStarting) Set(s); }
 
     void AddSource(string speaker, IWaveIn capture)
     {
@@ -157,7 +243,15 @@ public sealed class NoteTaker
         capture.DataAvailable += (_, e) =>
         {
             var samples = ToMono16k(e.Buffer, e.BytesRecorded, s.Format!);
-            lock (s.Gate) s.Pending.AddRange(samples);
+            lock (s.Gate)
+            {
+                // Computer audio sends nothing while it's silent: fill the gap so "Others" timestamps stay in sync.
+                var expected = (DateTime.Now - captureStart).TotalSeconds * Rate - samples.Length;
+                var have = s.Offset * Rate + s.Pending.Count;
+                var gap = (int)(expected - have);
+                if (gap > Rate / 2) s.Pending.AddRange(new float[Math.Min(gap, Rate * 60)]);
+                s.Pending.AddRange(samples);
+            }
         };
         sources.Add(s);
     }
@@ -198,7 +292,9 @@ public sealed class NoteTaker
                 s.Offset += cut / (double)Rate;
             }
             if (Rms(chunk) < 0.004) continue; // silence
-            var text = await Transcribe(chunk);
+            string text;
+            try { text = await Transcribe(chunk); }
+            catch { continue; }   // one bad chunk never stops the rest of the meeting
             if (string.IsNullOrWhiteSpace(text)) continue;
             Append(s.Speaker, start, text);
         }
@@ -274,24 +370,31 @@ public sealed class NoteTaker
     /// Also writes "<name> - Raw.txt" and "<name> - Smart.txt" next to it.
     void WriteFile(string? summary)
     {
+        if (!IsRecording && !flushing) return;
+        WriteNote(new Note(Snapshot(), meeting, filePath, StartedAt, DateTime.Now, context) { Smart = SmartTranscript }, summary);
+    }
+
+    static void WriteNote(Note n, string? summary)
+    {
+        var filePath = n.FilePath;
         if (filePath == null) return;
         var rule = new string('=', 60);
         var header = new StringBuilder();
-        header.AppendLine(meeting != null ? meeting.Title : $"Note – {StartedAt:dddd, MMMM d, yyyy h:mm tt}");
-        header.AppendLine($"Recorded with Just Say It · {StartedAt:f} · {Stamp((DateTime.Now - StartedAt).TotalSeconds)} · {context}");
-        if (meeting != null && meeting.Attendees.Count > 0) header.AppendLine("Attendees: " + string.Join(", ", meeting.Attendees));
-        var raw = RawTranscript();
+        header.AppendLine(n.Meeting != null ? n.Meeting.Title : $"Note – {n.StartedAt:dddd, MMMM d, yyyy h:mm tt}");
+        header.AppendLine($"Recorded with Just Say It · {n.StartedAt:f} · {Stamp((n.EndedAt - n.StartedAt).TotalSeconds)} · {n.Context}");
+        if (n.Meeting != null && n.Meeting.Attendees.Count > 0) header.AppendLine("Attendees: " + string.Join(", ", n.Meeting.Attendees));
+        var raw = n.Raw;
 
         var txt = new StringBuilder(header.ToString()).AppendLine();
         if (!string.IsNullOrWhiteSpace(summary)) txt.AppendLine(rule).AppendLine("SUMMARY").AppendLine(rule).AppendLine(Plain(summary)).AppendLine();
-        if (SmartTranscript != null) txt.AppendLine(rule).AppendLine("SMART TRANSCRIPT (words and logic fixed)").AppendLine(rule).AppendLine(SmartTranscript).AppendLine();
+        if (n.Smart != null) txt.AppendLine(rule).AppendLine("SMART TRANSCRIPT (words and logic fixed)").AppendLine(rule).AppendLine(n.Smart).AppendLine();
         txt.AppendLine(rule).AppendLine("RAW TRANSCRIPT (exactly as heard)").AppendLine(rule).AppendLine(raw);
         try { File.WriteAllText(filePath, txt.ToString()); } catch { }
 
         var b = Path.Combine(Path.GetDirectoryName(filePath)!, Path.GetFileNameWithoutExtension(filePath));
         try { File.WriteAllText(b + " - Raw.txt", header + "\nRAW TRANSCRIPT (exactly as heard)\n\n" + raw + "\n"); } catch { }
-        if (SmartTranscript != null)
-            try { File.WriteAllText(b + " - Smart.txt", header + "\nSMART TRANSCRIPT (words and logic fixed)\n\n" + SmartTranscript + "\n"); } catch { }
+        if (n.Smart != null)
+            try { File.WriteAllText(b + " - Smart.txt", header + "\nSMART TRANSCRIPT (words and logic fixed)\n\n" + n.Smart + "\n"); } catch { }
     }
 
     /// Timestamped transcript exactly as recognised.
@@ -303,12 +406,19 @@ public sealed class NoteTaker
     static string Plain(string md) => string.Join("\n", md.Replace("**", "").Split('\n').Select(l =>
         l.StartsWith("## ") ? l[3..].ToUpperInvariant() : l.StartsWith("- [ ] ") ? "• " + l[6..] : l.StartsWith("- ") ? "• " + l[2..] : l)).Trim();
 
-    async Task<string?> Summarize()
+    static async Task<string?> Summarize(Note note)
     {
-        var transcript = TranscriptText(false);
-        if (meeting != null) transcript = $"Meeting: {meeting.Title}\nAttendees: {string.Join(", ", meeting.Attendees)}\n\n" + transcript;
-        if (transcript.Length > 9000) transcript = transcript[..4500] + "\n…\n" + transcript[^4500..];
-        return await TextBrain.SummarizeMeeting(transcript);
+        var body = note.Smart ?? note.PlainText;
+        var m = note.Meeting;
+        var header = m != null ? $"Meeting: {m.Title}\nAttendees: {string.Join(", ", m.Attendees)}\n\n" : "";
+        if (body.Length <= 7000) return await TextBrain.SummarizeMeeting(header + body);
+        // Long call: note each part, then combine, so nothing in the middle is lost.
+        var partials = new List<string>();
+        foreach (var part in TextBrain.TranscriptChunks(body, 6000))
+            if (await TextBrain.SummarizeMeeting(header + part) is { } n) partials.Add(n);
+        if (partials.Count == 0) return null;
+        if (partials.Count == 1) return partials[0];
+        return await TextBrain.CombineNotes(partials) ?? string.Join("\n\n", partials);
     }
 
     void Set(string s) { Status = s; Changed?.Invoke(); }

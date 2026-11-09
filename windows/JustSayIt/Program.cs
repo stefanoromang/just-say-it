@@ -32,6 +32,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--selftest")
         {
             ApplicationConfiguration.Initialize();
+        // An unexpected error in one feature must never close the app (and lose a recording).
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) => LogError(e.Exception);
+        TaskScheduler.UnobservedTaskException += (_, e) => { LogError(e.Exception); e.SetObserved(); };
             Ui.Context = new WindowsFormsSynchronizationContext();
             SynchronizationContext.SetSynchronizationContext(Ui.Context);
             var report = args.Length > 1 ? args[1] : Path.Combine(Environment.CurrentDirectory, "selftest-report.txt");
@@ -57,6 +61,11 @@ static class Program
 
         using var ctx = new TrayApp(showWindow: !args.Contains("--background"));
         Application.Run(ctx);
+    }
+
+    static void LogError(Exception e)
+    {
+        try { File.AppendAllText(Path.Combine(Store.Dir, "errors.log"), $"{DateTime.Now:u} {e}\n\n"); } catch { }
     }
 
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -117,7 +126,8 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripMenuItem("Icon: cyan ready · pink dictating · purple Scribe · green Note Taker · orange working") { Enabled = false });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Start / Stop Dictation", null, (_, _) => c.ToggleFromMenu());
-        menu.Items.Add(NoteTaker.Shared.IsRecording ? "Stop Note Taker" : "Start Note Taker (Right Shift ×3)", null, (_, _) => c.ToggleNotes());
+        if (NoteTaker.Shared.IsRecording) menu.Items.Add("■ End Note Taker and send", null, (_, _) => NoteTaker.Shared.EndByUser());
+        else menu.Items.Add("Start Note Taker (Right Shift ×3)", null, (_, _) => c.ToggleNotes());
         menu.Items.Add("Show Note Taker", null, (_, _) => NoteWindow.ShowShared());
         var next = AutoJoin.Shared.Upcoming.FirstOrDefault(m => m.End > DateTime.Now);
         if (next != null) menu.Items.Add($"Join now: {next.Title} ({next.Start:t})", null, (_, _) => AutoJoin.Shared.Join(next));
@@ -143,10 +153,10 @@ sealed class TrayApp : ApplicationContext
             else MessageBox.Show(u.Status, "Just Say It", MessageBoxButtons.OK, MessageBoxIcon.Information);
         });
         menu.Items.Add("About Just Say It", null, (_, _) =>
-            MessageBox.Show("Just Say It 2.3\n\nAn original app designed and built by Stefano Roman Gunness.\nFree, private voice typing and meeting notes.\nTriple-tap Right Shift to start the Note Taker.\n\n© 2026 Stefano Roman Gunness · MIT License\nhttps://github.com/stefanoromang/just-say-it",
+            MessageBox.Show($"Just Say It {Updater.Current}\n\nAn original app designed and built by Stefano Roman Gunness.\nFree, private voice typing and meeting notes.\nTriple-tap Right Shift to start the Note Taker.\n\n© 2026 Stefano Roman Gunness · MIT License\nhttps://github.com/stefanoromang/just-say-it",
                 "About Just Say It", MessageBoxButtons.OK, MessageBoxIcon.Information));
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Quit", null, (_, _) => ExitThread());
+        menu.Items.Add("Quit", null, async (_, _) => await QuitSafely());
     }
 
     void ShowWindow()
@@ -155,6 +165,19 @@ sealed class TrayApp : ApplicationContext
         window.Show();
         window.WindowState = FormWindowState.Normal;
         window.Activate();
+    }
+
+    /// Never lose a recording on quit: finish it, save it and send it first.
+    async Task QuitSafely()
+    {
+        var notes = NoteTaker.Shared;
+        if (notes.IsBusy || CIQWindow.Sending)
+        {
+            c.Overlay.ShowState(OverlayState.Error, "Saving your notes before quitting…");
+            if (notes.IsRecording) await notes.Stop(sendImmediately: true);
+            for (int i = 0; i < 300 && (notes.IsBusy || CIQWindow.Sending); i++) await Task.Delay(1000);
+        }
+        ExitThread();
     }
 
     protected override void ExitThreadCore()

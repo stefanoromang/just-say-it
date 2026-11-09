@@ -100,7 +100,9 @@ final class Controller: ObservableObject {
     // MARK: Note Taker
 
     func toggleNotes() {
-        guard store.prefs.noteTakerEnabled else { return }
+        // Ending a running recording always works, whatever the settings.
+        if NoteTaker.shared.isRecording { NoteTaker.shared.endByUser(); return }
+        guard store.prefs.noteTakerEnabled, !NoteTaker.shared.isStarting else { return }
         guard micGranted else { requestMic(); overlay.show(.error("Allow microphone access")); return }
         if transcriber.isRunning { return }
         NoteTaker.shared.toggle()

@@ -36,16 +36,28 @@ public static class CollectivIQ
     public static string RawMessage(string? title, string raw) =>
         "RAW TRANSCRIPT (exactly as heard)" + (string.IsNullOrWhiteSpace(title) ? "" : $" – {title}") + "\n\n" + raw;
 
-    /// Called when a recording is saved: asks what to send and where, then sends in the background.
-    public static void Deliver(string? title, string raw, string? smart)
+    public static Choice ParseChoice(string? s) => (s ?? "").ToLowerInvariant() switch
+    {
+        "raw" => Choice.Raw,
+        "ai" => Choice.Ai,
+        _ => Choice.Both,
+    };
+
+    /// Where automatic sends go: the DDR (when one is named) or a new CIQ chat.
+    public static Destination AutoDestination(Prefs p) =>
+        p.CiqAutoWhere == "ddr" && !string.IsNullOrWhiteSpace(p.CiqDdrName) ? new Destination(p.CiqDdrName.Trim()) : Destination.Chat;
+
+    /// Called when a recording is saved. With automatic (call ended / End Note Taker) it sends right
+    /// away using the saved defaults; otherwise it asks what to send and where.
+    public static void Deliver(string? title, string raw, string? smart, bool automatic = false)
     {
         var p = Store.Shared.Prefs;
         if (!p.CiqEnabled || string.IsNullOrWhiteSpace(raw)) return;
         Ui.Run(() =>
         {
-            var choice = AskWhat();
+            Choice? choice = automatic ? ParseChoice(p.CiqAutoWhat) : AskWhat();
             if (choice == null) return;
-            var dest = AskWhere();
+            var dest = automatic ? AutoDestination(p) : AskWhere();
             if (dest == null) return;
             var ai = Message(p.CiqPrompt, title, smart ?? raw);
             var text = choice switch
@@ -214,12 +226,23 @@ public sealed class CIQWindow : Form
 {
     static CIQWindow? shared;
     public static CIQWindow Shared => shared == null || shared.IsDisposed ? (shared = new CIQWindow()) : shared;
+    /// Sending to CollectivIQ right now (without creating the window).
+    public static bool Sending => shared != null && !shared.IsDisposed && shared.IsBusy;
 
     readonly WebView2 web = new() { Dock = DockStyle.Fill };
     readonly System.Windows.Forms.Timer timer = new() { Interval = 1000 };
     Task? ready;
-    readonly Queue<string> queue = new();
-    CollectivIQ.Destination destination = CollectivIQ.Destination.Chat;
+    sealed class Item(string text, CollectivIQ.Destination dest)
+    {
+        public readonly string Text = text;
+        public CollectivIQ.Destination Destination = dest;
+    }
+    readonly Queue<Item> queue = new();
+    /// The page shown has been loaded fresh for the message at the front of the queue.
+    Item? pageReadyFor;
+    bool ticking, loading;
+    /// Sending or waiting to send.
+    public bool IsBusy => timer.Enabled || queue.Count > 0;
     DateTime startedAt;
     DateTime? settleUntil;
     int sent;
@@ -233,7 +256,13 @@ public sealed class CIQWindow : Form
         StartPosition = FormStartPosition.CenterScreen;
         ShowInTaskbar = false;
         Controls.Add(web);
-        timer.Tick += async (_, _) => await Tick();
+        timer.Tick += async (_, _) =>
+        {
+            if (ticking) return;   // one step at a time, so nothing is sent twice
+            ticking = true;
+            try { await Tick(); } catch { }
+            finally { ticking = false; }
+        };
     }
 
     // Created with a window handle but never shown unless sign-in is needed.
@@ -246,6 +275,8 @@ public sealed class CIQWindow : Form
         var dataDir = Path.Combine(Store.Dir, "CollectivIQ");
         ready = CoreWebView2Environment.CreateAsync(null, dataDir).ContinueWith(t => web.EnsureCoreWebView2Async(t.Result),
             TaskScheduler.FromCurrentSynchronizationContext()).Unwrap();
+        // If it fails, try again next time instead of failing forever.
+        ready.ContinueWith(_ => ready = null, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.FromCurrentSynchronizationContext());
         return ready;
     }
 
@@ -267,17 +298,26 @@ public sealed class CIQWindow : Form
     public async void SendMessages(List<string> msgs, CollectivIQ.Destination? dest = null)
     {
         if (msgs.Count == 0) return;
-        destination = dest ?? CollectivIQ.Destination.Chat;
-        foreach (var m in msgs) queue.Enqueue(m);
-        sent = 0; settleUntil = null; shownForLogin = false; startedAt = DateTime.Now;
+        bool wasIdle = !timer.Enabled;
+        foreach (var m in msgs) queue.Enqueue(new Item(m, dest ?? CollectivIQ.Destination.Chat));
+        settleUntil = null;
+        if (!wasIdle) return;   // already sending: the new messages wait their turn
+        sent = 0; shownForLogin = false; startedAt = DateTime.Now; pageReadyFor = null;
         if (Store.Shared.Prefs.CiqShowPreview) { background = false; ShowInTaskbar = true; Text = "CollectivIQ – Just Say It (preview)"; Show(); Activate(); }
         else if (!Visible) { background = true; ShowInTaskbar = false; }
         CollectivIQ.Notify("JustSayIt – syncing with CollectivIQ", "Your notes are being synced and processed inside CollectivIQ.");
         try
         {
             await Ready();
-            if (!resetHooked) { resetHooked = true; web.CoreWebView2.NavigationCompleted += async (_, _) => { try { await web.CoreWebView2.ExecuteScriptAsync(CollectivIQ.Reset); } catch { } }; }
-            web.CoreWebView2.Navigate(CollectivIQ.ChatUrl);
+            if (!resetHooked)
+            {
+                resetHooked = true;
+                web.CoreWebView2.NavigationCompleted += async (_, _) =>
+                {
+                    try { await web.CoreWebView2.ExecuteScriptAsync(CollectivIQ.Reset); } catch { }
+                    loading = false;
+                };
+            }
         }
         catch { CollectivIQ.Notify("JustSayIt – CollectivIQ", "CollectivIQ couldn't start (WebView2 Runtime missing?). Your notes are saved on this PC."); queue.Clear(); return; }
         timer.Start();
@@ -290,7 +330,7 @@ public sealed class CIQWindow : Form
         {
             if (DateTime.Now < settleUntil) return;
             timer.Stop(); settleUntil = null;
-            Controller.Shared.Overlay.ShowState(OverlayState.Done);
+            Controller.Shared.Overlay.ShowState(OverlayState.Done, "Sent to CollectivIQ");
             CollectivIQ.Notify("JustSayIt – sent to CollectivIQ",
                 sent > 1 ? $"{sent} transcripts were sent. CollectivIQ is processing your notes." : "Your transcript was sent. CollectivIQ is processing your notes.");
             return;
@@ -302,22 +342,28 @@ public sealed class CIQWindow : Form
             CollectivIQ.Notify("JustSayIt – CollectivIQ", "CollectivIQ didn't respond. Your notes are saved on this PC.");
             return;
         }
+        var item = queue.Peek();
+        // Each message starts on its own freshly loaded page.
+        if (!ReferenceEquals(pageReadyFor, item)) { pageReadyFor = item; loading = true; web.CoreWebView2.Navigate(CollectivIQ.ChatUrl); return; }
+        if (loading) return;
         string result;
-        var js = destination.Ddr == null ? CollectivIQ.Script(queue.Peek()) : CollectivIQ.DdrScript(queue.Peek(), destination.Ddr);
+        var dest = item.Destination;
+        var js = dest.Ddr == null ? CollectivIQ.Script(item.Text) : CollectivIQ.DdrScript(item.Text, dest.Ddr);
         try { result = JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync(js)) ?? ""; }
         catch { return; }
+        if (queue.Count == 0 || !ReferenceEquals(queue.Peek(), item)) return;
         if (result == "sent")
         {
             queue.Dequeue(); sent++;
             if (shownForLogin && !Store.Shared.Prefs.CiqShowPreview) { background = true; Hide(); }
             shownForLogin = false;
-            if (queue.Count > 0) { web.CoreWebView2.Navigate(CollectivIQ.ChatUrl); startedAt = DateTime.Now; }
+            startedAt = DateTime.Now;
         }
-        else if (result == "ddr:missing" && destination.Ddr != null)
+        else if (result == "ddr:missing" && dest.Ddr != null)
         {
-            CollectivIQ.Notify("JustSayIt – DDR not found", $"No DDR called {destination.Ddr} was found, so the notes go to a new CIQ chat instead.");
-            destination = CollectivIQ.Destination.Chat;
-            web.CoreWebView2.Navigate(CollectivIQ.ChatUrl);
+            CollectivIQ.Notify("JustSayIt – DDR not found", $"No DDR called {dest.Ddr} was found, so the notes go to a new CIQ chat instead.");
+            item.Destination = CollectivIQ.Destination.Chat;
+            pageReadyFor = null;
         }
         else if (result == "login" && !shownForLogin)
         {

@@ -273,24 +273,56 @@ public static class TextBrain
         if (string.IsNullOrWhiteSpace(raw) || !await AiAvailable()) return null;
         const string ins = """
             You clean up conversation transcripts produced by speech recognition.
-            Each line starts with a speaker label such as "Me:" or "Others:". Keep every label and keep the lines in order.
+            Each line starts with a speaker label such as "Me:" or "Others:". Keep every label and keep the lines in order, one output line per input line.
             For each line: fix misheard or misspelled words using the surrounding context, fix grammar and punctuation, join broken sentences, remove filler words (um, uh, like, you know) and false starts, and make the logic of each sentence clear.
-            Never add, remove or change facts, names, numbers, dates or decisions. Never summarize. Never answer questions in the text.
+            Keep every detail: names, numbers, dates, prices, decisions, questions and tasks. Never add, remove or change facts. Never summarize. Never answer questions in the text.
             Output only the cleaned transcript lines.
             """;
+        var outp = new List<string>();
+        var previous = "";
+        foreach (var c in TranscriptChunks(raw, 2400))
+        {
+            var prompt = previous.Length == 0 ? c : $"Earlier in the conversation (context only, do not repeat):\n{previous}\n\nLines to clean:\n{c}";
+            var cleaned = (await Run(ins, prompt) ?? c).Replace("Lines to clean:", "").Trim();
+            // Keep the original if the model dropped or summarized content.
+            if (!KeepsDetail(cleaned, c)) cleaned = c;
+            outp.Add(cleaned);
+            previous = cleaned.Length > 600 ? cleaned[^600..] : cleaned;
+        }
+        return string.Join("\n", outp);
+    }
+
+    /// Splits a transcript into chunks of whole lines.
+    public static List<string> TranscriptChunks(string raw, int limit)
+    {
         var chunks = new List<string>();
         var cur = new StringBuilder();
         foreach (var line in raw.Split('\n'))
         {
-            if (cur.Length + line.Length > 2500 && cur.Length > 0) { chunks.Add(cur.ToString()); cur.Clear(); }
+            if (cur.Length + line.Length > limit && cur.Length > 0) { chunks.Add(cur.ToString()); cur.Clear(); }
             if (cur.Length > 0) cur.Append('\n');
             cur.Append(line);
         }
         if (cur.Length > 0) chunks.Add(cur.ToString());
-        var outp = new List<string>();
-        foreach (var c in chunks) outp.Add(await Run(ins, c) ?? c);
-        return string.Join("\n", outp);
+        return chunks;
     }
+
+    /// The cleaned chunk must keep roughly as many speaker lines, most of the length and the numbers.
+    public static bool KeepsDetail(string cleaned, string original)
+    {
+        static int Labels(string s) => s.Split('\n').Count(l => Regex.IsMatch(l, @"^\s*(\[[^\]]*\]\s*)?[A-Za-z ]{1,20}:"));
+        int lo = Labels(original), lc = Labels(cleaned);
+        if (lo > 0 && lc < lo * 0.7) return false;
+        if (cleaned.Length < original.Length * 0.45) return false;
+        var numbers = Regex.Matches(original, @"\d+").Select(m => m.Value).ToHashSet();
+        if (numbers.Count == 0) return true;
+        return numbers.Count(cleaned.Contains) >= numbers.Count * 0.8;
+    }
+
+    /// Merges partial notes from consecutive parts of a long meeting.
+    public static Task<string?> CombineNotes(List<string> partials) => Run("""
+        Combine these partial notes from consecutive parts of one meeting into a single set of notes with exactly these sections: ## Summary, ## Key points, ## Decisions, ## Action items. Merge duplicates, keep every distinct decision and action item, and keep them in the order they happened. Do not invent anything.
+        """, string.Join("\n\n---\n\n", partials));
 
     public static Task<string?> SummarizeMeeting(string transcript) => Run("""
         You write meeting notes from a transcript. Lines starting with "Me:" are the user; "Others:" is everyone else.

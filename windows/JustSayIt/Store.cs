@@ -140,6 +140,33 @@ public class Prefs
     public string CiqModel { get; set; } = "Nemotron";
     public string CiqDdrName { get; set; } = "Notetaker";
     public bool CiqShowPreview { get; set; } = true;
+    /// Send automatically (no questions) when a call ends or End Note Taker is pressed.
+    public bool CiqAutoSend { get; set; } = true;
+    public string CiqAutoWhat { get; set; } = "both";
+    public string CiqAutoWhere { get; set; } = "ddr";
+    /// Call apps the Note Taker does not record automatically (ids from CallApps.Services).
+    public List<string> DisabledCallServices { get; set; } = new();
+
+    public bool IsCallServiceEnabled(string id)
+    {
+        if (id == "teams" && !RecordTeamsCalls) return false;
+        if (id == "zoom" && !RecordZoomCalls) return false;
+        if (id == "meet" && !RecordMeetCalls) return false;
+        return !(DisabledCallServices ?? new()).Contains(id);
+    }
+
+    public void SetCallServiceEnabled(string id, bool on)
+    {
+        switch (id)
+        {
+            case "teams": RecordTeamsCalls = on; break;
+            case "zoom": RecordZoomCalls = on; break;
+            case "meet": RecordMeetCalls = on; break;
+        }
+        DisabledCallServices ??= new();
+        DisabledCallServices.RemoveAll(x => x == id);
+        if (!on && id is not ("teams" or "zoom" or "meet")) DisabledCallServices.Add(id);
+    }
     public string CiqPrompt { get; set; } = Prompts.CiqStandard;
     public Dictionary<AppCategory, Tone> Tones { get; set; } = new()
     {
@@ -185,6 +212,26 @@ public class Store
         var trimmed = (Prefs.CiqPrompt ?? "").Trim().TrimEnd('.');
         if (trimmed.Length == 0 || trimmed == Prompts.CiqOldDefault.TrimEnd('.')) Prefs.CiqPrompt = Prompts.CiqStandard;
         History = Load<List<HistoryItem>>(HistoryPath) ?? new();
+        Repair(Prefs);
+    }
+
+    /// A hand-edited or old prefs.json can contain "null" for lists: replace them so nothing crashes.
+    public static void Repair(Prefs p)
+    {
+        p.CalendarFeeds ??= new();
+        p.CalendarFeeds.RemoveAll(f => f == null || f.Url == null);
+        p.DisabledCallServices ??= new();
+        p.Tones ??= new();
+        p.CustomInstructions ??= new();
+        p.Vocabulary ??= new();
+        p.Vocabulary.RemoveAll(v => v == null);
+        p.Replacements ??= new();
+        p.Replacements.RemoveAll(r => r == null || r.Heard == null || r.Write == null);
+        p.Snippets ??= new();
+        p.Snippets.RemoveAll(s => s == null || s.Trigger == null || s.Text == null);
+        p.CiqAutoWhat ??= "both";
+        p.CiqAutoWhere ??= "ddr";
+        p.CiqDdrName ??= "";
     }
 
     static T? Load<T>(string path)

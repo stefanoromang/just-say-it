@@ -91,7 +91,8 @@ public sealed class Updater
             if (UpdateAvailable)
             {
                 Set($"Version {Latest} is available (you have {Current}).");
-                if (!userInitiated && p.SkippedVersion != Latest) await Ui.Run(Prompt);
+                // Never interrupt a recording or a CollectivIQ send with the update dialog.
+                if (!userInitiated && p.SkippedVersion != Latest && !NoteTaker.Shared.IsBusy && !CIQWindow.Sending) await Ui.Run(Prompt);
             }
             else Set(Latest != null && IsNewer(Latest, Current) ? $"Version {Latest} is being prepared, try again in a few minutes." : $"You're up to date ({Current}).");
         }
@@ -133,6 +134,11 @@ public sealed class Updater
     public async Task Install()
     {
         if (Installing || setupUrl == null) return;
+        if (NoteTaker.Shared.IsBusy || CIQWindow.Sending)
+        {
+            Set("Finish or end the Note Taker first – update after your notes are saved and sent.");
+            return;
+        }
         Installing = true;
         Set($"Downloading Just Say It {Latest}…");
         try

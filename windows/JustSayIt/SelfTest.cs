@@ -180,15 +180,20 @@ public static class SelfTest
             return (cmp && u.Latest != null, $"current={Updater.Current} latest={u.Latest} status=\"{u.Status}\"");
         }, 60);
 
-        await Step("Live calls: detects Teams, Zoom and Meet; reads the microphone list", () =>
+        await Step("Live calls: detects all 16 call apps; reads the microphone and speaker lists", () =>
         {
-            bool apps = CallApps.Kind(@"C:\Users\a\AppData\Local\Microsoft\WindowsApps\MSTeams_8wekyb3d8bbwe\ms-teams.exe") == MeetingPlatform.Teams
-                && CallApps.Kind(@"C:\Users\a\AppData\Roaming\Zoom\bin\Zoom.exe") == MeetingPlatform.Zoom
+            bool apps = CallApps.Service(@"C:\Users\a\AppData\Local\Microsoft\WindowsApps\MSTeams_8wekyb3d8bbwe\ms-teams.exe")?.Id == "teams"
+                && CallApps.Service(@"C:\Users\a\AppData\Roaming\Zoom\bin\Zoom.exe")?.Id == "zoom"
+                && CallApps.Service(@"C:\Users\a\AppData\Local\Discord\app-1.0.9\Discord.exe")?.Id == "discord"
+                && CallApps.Service(@"C:\Users\a\AppData\Local\slack\app-4.41\slack.exe")?.Id == "slack"
+                && CallApps.Service(@"C:\Program Files\Cisco Spark\CiscoCollabHost.exe")?.Id == "webex"
                 && CallApps.IsBrowser(@"C:\Program Files\Google\Chrome\Application\chrome.exe")
-                && CallApps.PlatformForTitle("Meet - abc-defg-hij - Google Chrome") == MeetingPlatform.Meet
-                && CallApps.PlatformForTitle("Inbox - Gmail - Google Chrome") == null;
+                && CallApps.ServiceForTitle("Meet - abc-defg-hij - Google Chrome")?.Id == "meet"
+                && CallApps.ServiceForTitle("Inbox - Gmail - Google Chrome") == null
+                && CallApps.Services.Length >= 16;
             var users = CallWatcher.MicUsers();   // must not throw without admin rights
-            return Task.FromResult((apps, $"micInUse={users.Count}"));
+            var playing = CallWatcher.ActiveSessions(NAudio.CoreAudioApi.DataFlow.Render);
+            return Task.FromResult((apps, $"micInUse={users.Count} playing={playing.Count}"));
         });
 
         await Step("Built-in local AI: download, load and clean up text", async () =>

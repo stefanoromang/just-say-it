@@ -177,19 +177,34 @@ public sealed class MainWindow : Form
         f.Controls.Add(Group("2. Automatic joining", auto));
 
         var rec = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
-        rec.Controls.Add(Check("When a Teams, Zoom or Google Meet call starts, record and transcribe it", p.AutoRecordCalls, v => p.AutoRecordCalls = v));
-        var which = new FlowLayoutPanel { AutoSize = true };
-        which.Controls.Add(Check("Microsoft Teams", p.RecordTeamsCalls, v => p.RecordTeamsCalls = v));
-        which.Controls.Add(Check("Zoom", p.RecordZoomCalls, v => p.RecordZoomCalls = v));
-        which.Controls.Add(Check("Google Meet", p.RecordMeetCalls, v => p.RecordMeetCalls = v));
+        rec.Controls.Add(Check("When a call starts in any of these apps, record and transcribe it", p.AutoRecordCalls, v => p.AutoRecordCalls = v));
+        var which = new FlowLayoutPanel { AutoSize = false, Width = 760, Height = 4 * 28 + 6, WrapContents = true };
+        foreach (var svc in CallApps.Services)
+        {
+            var id = svc.Id;
+            var cb = Check(svc.Name, p.IsCallServiceEnabled(id), v => p.SetCallServiceEnabled(id, v));
+            cb.Width = 180; cb.AutoSize = false;
+            which.Controls.Add(cb);
+        }
         rec.Controls.Add(which);
-        rec.Controls.Add(L("Works for calls you join, answer or start, in the Teams and Zoom apps or in Chrome, Edge, Brave or Firefox. Recording starts a few seconds after the call uses your microphone and stops when the call ends; the transcript is saved (and sent to CollectivIQ if that's on).", Small, Color.DimGray, 760));
+        rec.Controls.Add(L("Desktop apps and web calls in Chrome, Edge, Brave, Firefox, Opera or Vivaldi. Recording starts a few seconds after a call uses your microphone and keeps going until that call ends – muting, other meetings starting or calendar end times never stop it. Press End Note Taker to finish it yourself; the notes are saved and sent to CollectivIQ straight away.", Small, Color.DimGray, 760));
+        var recRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
         var recStatus = L("", Small, Color.Firebrick);
-        rec.Controls.Add(recStatus);
-        void RenderRec() { var c = CallWatcher.Shared.ActiveCall; recStatus.Text = c != null ? $"● Recording: {c.Title} ({MeetingLinks.Name(c.Platform)})" : CallWatcher.Shared.Status; }
+        var endBtn = new Button { Text = "■ End Note Taker", AutoSize = true, BackColor = Color.Firebrick, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+        endBtn.Click += (_, _) => NoteTaker.Shared.EndByUser();
+        recRow.Controls.Add(recStatus);
+        recRow.Controls.Add(endBtn);
+        rec.Controls.Add(recRow);
+        void RenderRec()
+        {
+            var c = CallWatcher.Shared.ActiveCall;
+            recStatus.Text = c != null ? $"● Recording: {c.Title} ({c.Service.Name})" : CallWatcher.Shared.Status;
+            endBtn.Visible = NoteTaker.Shared.IsRecording;
+        }
         void OnRec() => Ui.Run(() => { if (!IsDisposed) RenderRec(); });
         CallWatcher.Shared.Changed += OnRec;
-        FormClosed += (_, _) => CallWatcher.Shared.Changed -= OnRec;
+        NoteTaker.Shared.Changed += OnRec;
+        FormClosed += (_, _) => { CallWatcher.Shared.Changed -= OnRec; NoteTaker.Shared.Changed -= OnRec; };
         RenderRec();
         f.Controls.Add(Group("Record every live call automatically", rec));
 
@@ -287,8 +302,28 @@ public sealed class MainWindow : Form
         ddrRow.Controls.Add(ddrBox);
         ciq.Controls.Add(ddrRow);
         ciq.Controls.Add(L("After each recording you choose CIQ Chat or this DDR. Leave empty to always use CIQ Chat.", Small, Color.DimGray, 760));
+        var autoSend = new CheckBox { Text = "When a call ends or I press End Note Taker, send right away without asking", Checked = store.Prefs.CiqAutoSend, AutoSize = true };
+        var autoRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        var what = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+        var whats = new[] { ("both", "Both"), ("ai", "AI version"), ("raw", "Raw") };
+        foreach (var w in whats) what.Items.Add(w.Item2);
+        what.SelectedIndex = Math.Max(0, Array.FindIndex(whats, w => w.Item1 == store.Prefs.CiqAutoWhat));
+        what.SelectedIndexChanged += (_, _) => { store.Prefs.CiqAutoWhat = whats[what.SelectedIndex].Item1; store.Save(); };
+        var where = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+        where.Items.Add("DDR (" + (string.IsNullOrWhiteSpace(store.Prefs.CiqDdrName) ? "–" : store.Prefs.CiqDdrName) + ")");
+        where.Items.Add("CIQ Chat");
+        where.SelectedIndex = store.Prefs.CiqAutoWhere == "chat" ? 1 : 0;
+        where.SelectedIndexChanged += (_, _) => { store.Prefs.CiqAutoWhere = where.SelectedIndex == 1 ? "chat" : "ddr"; store.Save(); };
+        autoRow.Controls.Add(new Label { Text = "Send", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
+        autoRow.Controls.Add(what);
+        autoRow.Controls.Add(new Label { Text = "to", AutoSize = true, Padding = new Padding(8, 6, 0, 0) });
+        autoRow.Controls.Add(where);
+        autoRow.Enabled = autoSend.Checked;
+        autoSend.CheckedChanged += (_, _) => { store.Prefs.CiqAutoSend = autoSend.Checked; autoRow.Enabled = autoSend.Checked; store.Save(); };
         var preview = new CheckBox { Text = "Show a live preview while sending to CollectivIQ", Checked = store.Prefs.CiqShowPreview, AutoSize = true };
         preview.CheckedChanged += (_, _) => { store.Prefs.CiqShowPreview = preview.Checked; store.Save(); };
+        ciq.Controls.Add(autoSend);
+        ciq.Controls.Add(autoRow);
         ciq.Controls.Add(preview);
         ciq.Controls.Add(L("Prompt", Small, Color.DimGray));
         ciq.Controls.Add(prompt);
@@ -568,7 +603,7 @@ public sealed class MainWindow : Form
 
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };
         link.LinkClicked += (_, _) => Open("https://github.com/stefanoromang/just-say-it");
-        f.Controls.Add(L("Just Say It 2.3 · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
+        f.Controls.Add(L($"Just Say It {Updater.Current} · © 2026 Stefano Roman Gunness · MIT License", Small, Color.Gray));
         f.Controls.Add(link);
         page.Controls.Add(f);
         return page;

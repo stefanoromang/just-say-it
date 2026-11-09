@@ -86,7 +86,14 @@ final class Updater: ObservableObject {
             Self.log("checked: current=\(current) latest=\(latest ?? "nil") available=\(updateAvailable)")
             if updateAvailable {
                 status = "Version \(latest!) is available (you have \(current))."
-                if !userInitiated && Store.shared.prefs.skippedVersion != latest { prompt() }
+                if !userInitiated && Store.shared.prefs.skippedVersion != latest {
+                    // Never interrupt a recording or a CollectivIQ send with the update dialog.
+                    if NoteTaker.shared.isBusy || CIQSender.shared.isBusy {
+                        CollectivIQ.notify("Just Say It \(latest!) is available", "Install it from the menu bar when your call is over.")
+                    } else {
+                        prompt()
+                    }
+                }
             } else {
                 status = "You're up to date (\(current))."
             }
@@ -130,6 +137,11 @@ final class Updater: ObservableObject {
     /// Runs the official installer in the background, then relaunches the app.
     func install() {
         guard !installing else { return }
+        if NoteTaker.shared.isBusy || CIQSender.shared.isBusy {
+            status = "Finish or end the Note Taker first – the update installs after your notes are saved and sent."
+            Controller.shared.overlay.show(.error("End the Note Taker before updating"))
+            return
+        }
         installing = true
         status = "Downloading and building the update… (about a minute)"
         let log = FileManager.default.temporaryDirectory.appendingPathComponent("just-say-it-update.log")

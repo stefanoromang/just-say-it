@@ -87,7 +87,7 @@ public sealed class Overlay : Form
         {
             OverlayState.NoteTaker => "JustSayIt - Note taker is active",
             OverlayState.Thinking => "Polishing…",
-            OverlayState.Done => "Inserted",
+            OverlayState.Done => string.IsNullOrEmpty(message) ? "Inserted" : message,
             OverlayState.Error => message,
             _ => "",
         };

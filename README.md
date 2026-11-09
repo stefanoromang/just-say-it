@@ -43,7 +43,7 @@ I wanted one tool that does two things well: lets me *write by talking* anywhere
 - **Many languages**, all processed on-device (40+ on Mac, ~100 with auto-detect on Windows).
 - **Note Taker.** Press **Right Shift three times** to record and transcribe a conversation or call (you and the other side), with live transcript, speaker labels, automatic meeting notes and Markdown files. [More below](#note-taker).
 - **Send to CollectivIQ.** After each recording, sends your own prompt + the full transcript to a new CollectivIQ chat inside the app (sign in once in the app's CollectivIQ window).
-- **Records every live call automatically.** Join or answer a Teams, Zoom or Google Meet call, in the app or in your browser, and the Note Taker records and transcribes it, then saves it when the call ends.
+- **Records every live call automatically.** Join or answer a call in Microsoft Teams, Google Meet, Zoom, FaceTime, Cisco Webex, Slack Huddles, Discord, Skype, Whereby, Jitsi Meet, RingCentral (and RingCentral Video), GoTo Meeting, Zoho Meeting, Signal, WhatsApp and Telegram, in the app or in your browser, and the Note Taker records it until that call ends, then saves it and sends it to CollectivIQ straight away.
 - **Auto-join meetings.** Connects to your **Google and Microsoft calendars**, joins your **Zoom, Google Meet and Teams** calls on time, and takes notes for each one automatically.
 - **History and stats.** Words dictated, speaking speed, time saved. Stored only on your computer.
 
@@ -104,7 +104,7 @@ The Note Taker records and transcribes conversations, such as calls, interviews,
 |---|---|---|
 | Start / stop | Press **Right ⇧ Shift three times** quickly | Press **Right Shift three times** quickly |
 | Also from | Menu bar → **Start Note Taker**, or the **Note Taker** page | Tray menu → **Start Note Taker**, or the **Note Taker** tab |
-| Automatically | **Whenever a Teams, Zoom or Google Meet call starts**, and when a calendar meeting starts (see [Meetings](#meetings-auto-join-and-take-notes)) | Same |
+| Automatically | **Whenever a call starts in any supported call app**, and when a calendar meeting starts (see [Meetings](#meetings-auto-join-and-take-notes)) | Same |
 
 Normal typing with Shift never triggers it: only three quick taps within about a second do, with no other keys pressed.
 
@@ -158,10 +158,16 @@ The built-in prompt asks for a **16-section meeting analysis**: metadata, partic
 
 ### Every live call is recorded automatically
 
-Join, answer or start a call in **Microsoft Teams**, **Zoom** or **Google Meet** (the desktop apps, or Chrome, Edge, Safari, Brave, Arc or Firefox). Just Say It notices the call is using your microphone and **starts the Note Taker by itself**. When you hang up, it **stops and saves the transcript** automatically, and sends it to CollectivIQ if you turned that on.
+Join, answer or start a call in any of these apps and Just Say It **starts the Note Taker by itself**:
 
-- It reacts to **real calls only**: opening Teams or Zoom, or having a Meet tab open, doesn't start a recording. Only an active call using the microphone does.
-- **On by default.** Change it in **Meetings › Record every live call automatically**, where you can also pick Teams, Zoom and Meet individually.
+Microsoft Teams, Google Meet, Zoom, FaceTime, Cisco Webex, Slack Huddles, Discord, Skype, Whereby, Jitsi Meet, RingCentral (and RingCentral Video), GoTo Meeting, Zoho Meeting, Signal, WhatsApp and Telegram – the desktop apps, or the web versions in Chrome, Edge, Safari, Brave, Arc, Vivaldi, Opera or Firefox.
+
+- **It keeps recording until that call ends.** Muting yourself, quiet moments, the calendar end time or another meeting starting never stop it. The call counts as ended when its app has used neither your microphone nor your speakers for 45 seconds.
+- **Call running long and the next meeting starts?** The first recording keeps going (the next meeting is not recorded on top of it). Press **End Note Taker** in the Note Taker window, the menu bar / tray menu or Meetings settings to finish it.
+- **Sent straight away.** When the call ends or you press End Note Taker, the notes are saved and sent to CollectivIQ immediately – no questions. Choose what (**Both**, **AI version** or **Raw**) and where (your **DDR** or **CIQ Chat**) once in the CollectivIQ settings.
+- **As much detail as possible.** The raw transcript keeps every word with timestamps and speaker labels. The AI *smart transcript* fixes misheard words, grammar and broken sentences using the context of the whole conversation, and is checked to make sure no names, numbers or lines were dropped (if anything is lost, the original lines are kept).
+- It reacts to **real calls only**: opening an app or having a tab open doesn't start a recording. Only a call using the microphone for a few seconds does.
+- **On by default.** Change it in **Meetings › Record every live call automatically**, where you can turn each app on or off.
 - On Mac, allow **Screen Recording** to capture the other people too; on Windows that works without extra setup.
 
 ### Join calendar meetings for you
@@ -187,7 +193,7 @@ Then turn on **Join my calendar calls automatically**. The first time you join a
 
 **No administrator password needed.** Just Say It installs and runs for your Windows account only, so it works on work PCs and normal (non-admin) accounts.
 
-**Easiest:** download **`JustSayIt-Setup-2.3.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
+**Easiest:** download **`JustSayIt-Setup-2.4.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
 
 **Or** open PowerShell and paste:
 
@@ -288,7 +294,8 @@ The Mac app is plain Swift / SwiftUI with no third-party dependencies:
 | `Sources/JustSayIt/NoteCapture.swift` | Long-form transcription and computer-audio capture |
 | `Sources/JustSayIt/NoteWindow.swift` | Live Note Taker window |
 | `Sources/JustSayIt/AutoJoin.swift` | Calendar watching, auto-join and automatic notes |
-| `Sources/JustSayIt/CallWatcher.swift` | Detects live Teams / Zoom / Meet calls and records them |
+| `Sources/JustSayIt/CallWatcher.swift` | Detects live calls and records each one until it ends |
+| `Sources/JustSayIt/CallApps.swift` | The supported call apps (apps, web addresses, window titles) |
 | `Sources/JustSayIt/CIQSender.swift` | Sends transcripts to CollectivIQ in the background |
 | `Sources/JustSayIt/StatusIcon.swift` | Neon menu-bar icon that changes color by mode |
 | `Sources/JustSayIt/LoginItem.swift` | Starts the app when you log in |
@@ -325,7 +332,8 @@ The Windows app is C# / WinForms, using [Whisper.net](https://github.com/sandroh
 | `windows/JustSayIt/NoteTaker.cs` | Note Taker: mic + computer audio, chunked Whisper, summary, files |
 | `windows/JustSayIt/NoteWindow.cs` | Live Note Taker window |
 | `windows/JustSayIt/AutoJoin.cs` | Calendar (ICS) reading, auto-join and automatic notes |
-| `windows/JustSayIt/CallWatcher.cs` | Detects live Teams / Zoom / Meet calls and records them |
+| `windows/JustSayIt/CallWatcher.cs` | Detects live calls and records each one until it ends |
+| `windows/JustSayIt/CallApps.cs` | The supported call apps (executables, window titles) |
 | `windows/JustSayIt/TrayIcons.cs` | Neon tray icon that changes color by mode |
 | `windows/JustSayIt/MeetingLinks.cs` | Finds Zoom / Meet / Teams links in calendar events |
 | `windows/JustSayIt/Updater.cs` | Checks GitHub for updates and installs them (per-user) |
@@ -363,7 +371,7 @@ Just Say It is original software. It uses these platforms and open-source librar
 - **Windows:** [LLamaSharp](https://github.com/SciSharp/LLamaSharp) / [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT) with [Qwen 2.5](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF) (Apache 2.0) or [Llama 3.2](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct) (Llama 3.2 Community License) models, [Whisper.net](https://github.com/sandrohanea/whisper.net) / [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with OpenAI's Whisper models (MIT), [NAudio](https://github.com/naudio/NAudio) (MIT), [Ical.Net](https://github.com/ical-org/ical.net) (MIT), Microsoft WebView2, and Windows' built-in OCR and UI Automation. Optional local AI via [Ollama](https://ollama.com).
 - **CollectivIQ** is a separate service with its own terms. You need your own CollectivIQ account to use that integration.
 
-Zoom, Google Meet, Microsoft Teams, Google Calendar and Outlook are trademarks of their respective owners. They're mentioned only to describe compatibility, and Just Say It isn't affiliated with or endorsed by them. Full details are in [NOTICE.md](NOTICE.md).
+Zoom, Google Meet, Microsoft Teams, FaceTime, Webex, Slack, Discord, Skype, Whereby, Jitsi, RingCentral, GoTo, Zoho, Signal, WhatsApp, Telegram, Google Calendar and Outlook are trademarks of their respective owners. They're mentioned only to describe compatibility, and Just Say It isn't affiliated with or endorsed by them. Full details are in [NOTICE.md](NOTICE.md).
 
 ## License
 

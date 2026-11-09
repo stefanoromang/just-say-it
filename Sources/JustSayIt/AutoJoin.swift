@@ -39,9 +39,11 @@ final class AutoJoin: ObservableObject {
         NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: store, queue: .main) { _ in
             MainActor.assumeIsolated { AutoJoin.shared.refresh() }
         }
-        timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { _ in
+        let t = Timer(timeInterval: 15, repeats: true) { _ in
             MainActor.assumeIsolated { AutoJoin.shared.tick() }
         }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
         refresh()
     }
 
@@ -111,9 +113,10 @@ final class AutoJoin: ObservableObject {
                 Controller.shared.overlay.show(.error("Joining “\(m.title)” in 2 min – \(m.link.platform.rawValue)"))
             }
         }
-        // Stop notes when the current meeting is over.
+        // Calendar end times never stop a recording: notes keep going until the call itself ends
+        // (CallWatcher) or the user presses End Note Taker.
         if let c = current, now >= c.end.addingTimeInterval(TimeInterval(p.autoJoinStopGraceSeconds)) {
-            finishCurrent()
+            current = nil
         }
     }
 
@@ -125,19 +128,17 @@ final class AutoJoin: ObservableObject {
         lastAction = (opened ? "Joined" : "Couldn't open") + " “\(m.title)” on \(m.link.platform.rawValue)"
         guard opened, p.autoJoinStartNotes, p.noteTakerEnabled else { return }
         current = m
-        let notes = NoteTaker.shared
-        Task {
-            if notes.isRecording && notes.origin == .call { return }   // the live call is already being recorded
-            if notes.isRecording { await notes.stop() }
-            // Give the meeting app a moment to connect audio.
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
-            await notes.start(meeting: m, origin: .calendar)
+        // Never interrupt a recording that's already running (another call that ran long).
+        if NoteTaker.shared.isRecording || NoteTaker.shared.isStarting {
+            lastAction += " – still recording your previous call; end it with End Note Taker"
+            return
         }
-    }
-
-    func finishCurrent() {
-        guard current != nil else { return }
-        current = nil
-        Task { await NoteTaker.shared.stop() }
+        // When call detection is on, it starts the notes as soon as the meeting uses the mic and
+        // ties them to that call. Otherwise start them here.
+        if p.autoRecordCalls { return }
+        Task {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if !NoteTaker.shared.isRecording && !NoteTaker.shared.isStarting { await NoteTaker.shared.start(meeting: m, origin: .calendar) }
+        }
     }
 }

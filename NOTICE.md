@@ -27,4 +27,4 @@ Just Say It runs on the following platforms and libraries. Each remains under it
 ## Services and trademarks
 
 - **CollectivIQ** is an independent service with its own terms of use. The integration requires each user's own CollectivIQ account.
-- Zoom, Google Meet, Google Calendar, Microsoft Teams, Outlook, Microsoft 365, macOS and Windows are trademarks of their respective owners. They are referenced only to describe compatibility. Just Say It is not affiliated with, sponsored by or endorsed by any of them.
+- Zoom, Google Meet, Google Calendar, Microsoft Teams, FaceTime, Cisco Webex, Slack, Discord, Skype, Whereby, Jitsi Meet, RingCentral, GoTo Meeting, Zoho Meeting, Signal, WhatsApp, Telegram, Outlook, Microsoft 365, macOS and Windows are trademarks of their respective owners. They are referenced only to describe compatibility. Just Say It is not affiliated with, sponsored by or endorsed by any of them.

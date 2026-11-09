@@ -104,8 +104,10 @@ public sealed class Controller : IDisposable
 
     public void ToggleNotes()
     {
-        if (!store.Prefs.NoteTakerEnabled || Transcriber.IsRecording) return;
-        if (!NoteTaker.Shared.IsRecording) NoteWindow.ShowShared();
+        // Ending a running recording always works, whatever the settings.
+        if (NoteTaker.Shared.IsRecording) { NoteTaker.Shared.EndByUser(); return; }
+        if (!store.Prefs.NoteTakerEnabled || Transcriber.IsRecording || NoteTaker.Shared.IsBusy) return;
+        NoteWindow.ShowShared();
         NoteTaker.Shared.Toggle();
     }
 

@@ -31,7 +31,7 @@ public sealed class AutoJoin
     public void Boot()
     {
         tick.Tick += (_, _) => Tick();
-        reload.Tick += async (_, _) => await Refresh();
+        reload.Tick += async (_, _) => { try { await Refresh(); } catch { } };
         tick.Start();
         reload.Start();
         _ = Refresh();
@@ -104,7 +104,9 @@ public sealed class AutoJoin
                 Changed?.Invoke();
             }
         }
-        if (Current != null && now >= Current.End.AddSeconds(p.AutoJoinStopGraceSeconds)) FinishCurrent();
+        // Calendar end times never stop a recording: notes keep going until the call itself ends
+        // (CallWatcher) or the user presses End Note Taker.
+        if (Current != null && now >= Current.End.AddSeconds(p.AutoJoinStopGraceSeconds)) { Current = null; Changed?.Invoke(); }
     }
 
     public void Join(UpcomingMeeting m)
@@ -116,23 +118,28 @@ public sealed class AutoJoin
         Changed?.Invoke();
         if (!opened || !p.AutoJoinStartNotes || !p.NoteTakerEnabled) return;
         Current = m;
-        _ = Task.Run(async () =>
+        // Never interrupt a recording that's already running (a previous call that ran long).
+        if (NoteTaker.Shared.IsRecording || NoteTaker.Shared.IsStarting)
         {
-            var notes = NoteTaker.Shared;
-            if (notes.IsRecording && notes.CurrentOrigin == NoteTaker.Origin.Call) return;   // the live call is already being recorded
-            if (notes.IsRecording) await notes.Stop();
-            await Task.Delay(4000);
-            await Ui.Run(NoteWindow.ShowShared);
-            await notes.Start(m, NoteTaker.Origin.Calendar);
-        });
+            LastAction += " – still recording your previous call; end it with End Note Taker";
+            Changed?.Invoke();
+            return;
+        }
+        // With call detection on, it starts the notes as soon as the meeting uses the microphone
+        // and ties them to that call. Otherwise start them here.
+        if (p.AutoRecordCalls) return;
+        _ = StartNotesSoon(m);
     }
 
-    public void FinishCurrent()
+    static async Task StartNotesSoon(UpcomingMeeting m)
     {
-        if (Current == null) return;
-        Current = null;
-        _ = NoteTaker.Shared.Stop();
-        Changed?.Invoke();
+        await Task.Delay(4000);
+        await Ui.Run(() =>
+        {
+            if (NoteTaker.Shared.IsBusy) return;
+            NoteWindow.ShowShared();
+            _ = NoteTaker.Shared.Start(m, NoteTaker.Origin.Calendar);
+        });
     }
 
     static bool Open(string url)
