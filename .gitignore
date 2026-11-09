@@ -1,9 +1,11 @@
+*.xcodeproj/
+.DS_Store
 .build/
+.swiftpm/
+assets/signing/
+bin/
 build/
 dist/
-*.xcodeproj/
-.swiftpm/
-.DS_Store
-bin/
+final/
 obj/
 windows/dist/

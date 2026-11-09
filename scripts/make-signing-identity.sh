@@ -12,6 +12,16 @@ if [ -f "$KC" ]; then
   exit 0
 fi
 
+# New Mac: restore the project's saved signing identity so macOS keeps trusting rebuilt apps.
+BACKUP="$(cd "$(dirname "$0")/.." && pwd)/assets/signing/justsayit-signing.keychain-db"
+if [ -f "$BACKUP" ]; then
+  cp "$BACKUP" "$KC"
+  security unlock-keychain -p "$PW" "$KC"
+  security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$PW" "$KC" >/dev/null 2>&1 || true
+  echo "Restored signing identity from assets/signing"
+  exit 0
+fi
+
 TMP=$(mktemp -d)
 cat > "$TMP/cfg" <<EOF
 [req]
