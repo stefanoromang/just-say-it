@@ -2,6 +2,26 @@
 
 All notable changes to **Just Say It**, an original app designed and built by **Stefano Roman Gunness**.
 
+## 2.5 – 2026-11-09
+
+### Speak English, Spanish, Portuguese and Italian without switching
+- New **Settings › Languages you speak**: pick your main language and up to three more.
+- Just Say It listens in all of them at once and picks the right language **phrase by phrase**, so you can switch in the middle of a sentence without saying so. Short switches inside a sentence are caught too. Works for dictation, Scribe and the Note Taker, on Mac and Windows.
+
+### Smarter Scribe
+- Scribe first lists every point, name, date and number you said, then writes the message from that list. It writes the actual message to the person ("tell Laura…" becomes a message to Laura), uses the screen only to know who and what you're replying to, and writes in the language of the conversation.
+- It checks that no number you said is missing and fixes it if so.
+- New **Scribe tone** setting (Formal by default) for more formal, logical messages.
+- Dictation cleanup now also handles Spanish, Portuguese and Italian fillers and self-corrections, and fixes words misheard in the wrong language.
+
+### Gets smarter as you use it
+- Fix a word in the result card and Just Say It learns: after the same fix twice it's corrected automatically, and names you fix are recognised next time.
+- It learns which languages you use most (helps with close calls) and how you write in each kind of app.
+- See what it learned, remove fixes, or reset it in **Settings › Gets smarter as you use it**. Everything stays on your computer.
+
+### Esc closes the result card
+- Press **Esc** to close the result card from anywhere, even when you're typing in another app. No mouse needed.
+
 ## 2.4 – 2026-11-09
 
 ### Every call, recorded from start to finish

@@ -7,7 +7,8 @@ import Foundation
 import ScreenCaptureKit
 import Speech
 
-/// One audio source → Apple's on-device long-form SpeechTranscriber.
+/// One audio source → Apple's on-device long-form SpeechTranscriber, in one or several languages.
+/// With several, every phrase keeps the language that heard it best (see LanguageMix).
 final class TranscriptPipe: @unchecked Sendable {
     var onFinal: ((String, Double) -> Void)?    // text, start time in seconds
     var onVolatile: ((String) -> Void)?
@@ -27,11 +28,21 @@ final class TranscriptPipe: @unchecked Sendable {
         }
     }
 
-    func start(locale: Locale) async throws {
-        let t = SpeechTranscriber(locale: locale, transcriptionOptions: [],
-                                  reportingOptions: [.volatileResults], attributeOptions: [.audioTimeRange])
-        let a = SpeechAnalyzer(modules: [t], options: .init(priority: .userInitiated, modelRetention: .processLifetime))
-        guard let fmt = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [t]) else {
+    static func ensureModels(_ ids: [String]) async throws {
+        for id in ids { try await ensureModel(locale: Locale(identifier: id)) }
+    }
+
+    func start(locale: Locale) async throws { try await start(languages: [locale.identifier]) }
+
+    func start(languages ids: [String]) async throws {
+        let langs = ids.isEmpty ? ["en_US"] : ids
+        let modules = langs.map { id in
+            (id, SpeechTranscriber(locale: Locale(identifier: id), transcriptionOptions: [],
+                                   reportingOptions: [.volatileResults],
+                                   attributeOptions: [.audioTimeRange, .transcriptionConfidence]))
+        }
+        let a = SpeechAnalyzer(modules: modules.map(\.1), options: .init(priority: .userInitiated, modelRetention: .processLifetime))
+        guard let fmt = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: modules.map(\.1)) else {
             throw NSError(domain: "JustSayIt", code: 2, userInfo: [NSLocalizedDescriptionKey: "No compatible audio format for notes"])
         }
         analyzerFormat = fmt
@@ -39,20 +50,51 @@ final class TranscriptPipe: @unchecked Sendable {
         let (stream, cont) = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .unbounded)
         continuation = cont
         analyzer = a
-        resultsTask = Task { [weak self] in
-            do {
-                for try await r in t.results {
-                    let text = String(r.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if r.isFinal {
-                        if !text.isEmpty { self?.onFinal?(text, r.range.start.seconds) }
-                        self?.onVolatile?("")
-                    } else {
-                        self?.onVolatile?(text)
+        if langs.count == 1, let t = modules.first?.1 {
+            resultsTask = Task { [weak self] in
+                do {
+                    for try await r in t.results {
+                        let text = String(r.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
+                        if r.isFinal {
+                            if !text.isEmpty { self?.onFinal?(text, r.range.start.seconds) }
+                            self?.onVolatile?("")
+                        } else {
+                            self?.onVolatile?(text)
+                        }
                     }
+                } catch {}
+            }
+        } else {
+            let mix = LanguageMix.Stream(languages: langs)
+            mix.prior = await MainActor.run { Learner.languagePrior() }
+            self.mix = mix
+            let tasks = modules.map { (id, t) in
+                Task { [weak self] in
+                    do {
+                        for try await r in t.results {
+                            if r.isFinal {
+                                mix.add(id, Transcriber.words(r.text), through: r.range.end.seconds)
+                                self?.emit(mix.drain())
+                            } else if id == langs[0] {
+                                self?.onVolatile?(String(r.text.characters).trimmingCharacters(in: .whitespacesAndNewlines))
+                            }
+                        }
+                    } catch {}
                 }
-            } catch {}
+            }
+            resultsTask = Task {
+                for t in tasks { await t.value }
+            }
         }
         try await a.start(inputSequence: stream)
+    }
+
+    private var mix: LanguageMix.Stream?
+
+    private func emit(_ pieces: [LanguageMix.Piece]) {
+        guard !pieces.isEmpty else { return }
+        onVolatile?("")
+        for p in pieces where !p.text.isEmpty { onFinal?(p.text, p.start) }
     }
 
     /// Called from audio threads.
@@ -87,6 +129,8 @@ final class TranscriptPipe: @unchecked Sendable {
         cont?.finish()
         try? await analyzer?.finalizeAndFinishThroughEndOfInput()
         _ = await resultsTask?.value
+        if let mix { emit(mix.drain(final: true)) }
+        mix = nil
         analyzer = nil
         resultsTask = nil
     }

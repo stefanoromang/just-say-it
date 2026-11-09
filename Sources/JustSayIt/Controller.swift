@@ -33,6 +33,8 @@ final class Controller: ObservableObject {
     private var screenTask: Task<String?, Never>?
     private var startTask: Task<Void, Never>?
     private var lastRaw = ""
+    /// The text as Just Say It delivered it (to learn from what you change in the card).
+    private var delivered = ""
 
     func boot() {
         transcriber.onLevel = { [weak self] l in self?.overlay.model.push(l) }
@@ -83,13 +85,23 @@ final class Controller: ObservableObject {
     func prepareModel() async {
         modelStatus = "Downloading speech model (first run only)…"
         do {
-            try await transcriber.ensureModel(localeID: store.prefs.localeID)
+            let langs = store.prefs.spokenLanguages
+            for (i, id) in langs.enumerated() {
+                if langs.count > 1 { modelStatus = "Downloading speech model \(i + 1) of \(langs.count) (first run only)…" }
+                try await transcriber.ensureModel(localeID: id)
+            }
             modelReady = true
-            modelStatus = "Speech model ready (on-device)"
+            modelStatus = langs.count > 1
+                ? "Speech models ready (on-device): \(langs.map(Self.languageName).joined(separator: ", ")) – switch any time"
+                : "Speech model ready (on-device)"
         } catch {
             modelReady = false
             modelStatus = "Speech model error: \(error.localizedDescription)"
         }
+    }
+
+    nonisolated static func languageName(_ id: String) -> String {
+        Locale.current.localizedString(forIdentifier: id) ?? id
     }
 
     func setHotkey(_ h: HotkeyChoice) {
@@ -137,13 +149,13 @@ final class Controller: ObservableObject {
         overlay.model.contextLabel = "\(ctx.appName) · \(store.tone(for: ctx.category).label)"
         if store.prefs.playSounds { NSSound(named: "Tink")?.play() }
 
-        var vocab = store.prefs.vocabulary + store.prefs.replacements.map(\.write)
+        var vocab = store.prefs.vocabulary + store.prefs.replacements.map(\.write) + Learner.shared.terms
         if let sel = ctx.selectedText { vocab += ContextReader.glossary(from: sel) }
         if let t = ctx.windowTitle { vocab += ContextReader.glossary(from: t) }
         let vocabulary = Array(vocab.prefix(100))
         startTask = Task {
             do {
-                try await transcriber.start(localeID: store.prefs.localeID, vocabulary: vocabulary)
+                try await transcriber.start(localeIDs: store.prefs.spokenLanguages, vocabulary: vocabulary)
             } catch {
                 overlay.show(.error("Mic/speech error: \(error.localizedDescription)"))
                 hotkeys.reset()
@@ -180,6 +192,8 @@ final class Controller: ObservableObject {
             lastResult = text
             store.record(HistoryItem(date: Date(), raw: raw, final: text, app: ctx.appName,
                                      seconds: duration, words: text.split { $0.isWhitespace }.count))
+            Learner.shared.dictated(final: text, languages: transcriber.lastPieces.map(\.language), category: ctx.category)
+            delivered = text
             await deliver(text)
         }
     }
@@ -226,21 +240,26 @@ final class Controller: ObservableObject {
 
         let tone = store.tone(for: ctx.category)
         let custom = p.customInstructions[ctx.category]
-        let ruled = TextBrain.ruleClean(expanded)
+        let learner = Learner.shared
+        // Words you corrected twice or more are fixed before the AI sees them.
+        let ruled = TextBrain.applyReplacements(TextBrain.ruleClean(expanded), learner.fixes, vocabulary: [])
+        let vocabulary = p.vocabulary + learner.terms.filter { !p.vocabulary.contains($0) }
+        let style = learner.style(for: ctx.category)
         var out = ruled
 
         if let sel = ctx.selectedText, !scribe, TextBrain.looksLikeEditCommand(ruled) {
             // Spoken instruction applied to selected text ("make this shorter", "translate to Spanish").
             if let s = await TextBrain.editSelection(sel, instruction: ruled, ctx: ctx, tone: tone) { out = s }
         } else if scribe {
-            if let s = await TextBrain.scribe(ruled, ctx: ctx, tone: tone, custom: custom) { out = s }
+            if let s = await TextBrain.scribe(ruled, ctx: ctx, tone: p.scribeTone, custom: custom,
+                                              vocabulary: vocabulary, style: style) { out = s }
         } else if p.aiCleanup, ruled.split(separator: " ").count >= 3 || ruled.contains("\n") {
-            if let s = await TextBrain.polish(ruled, ctx: ctx, tone: tone, custom: custom, vocabulary: p.vocabulary),
+            if let s = await TextBrain.polish(ruled, ctx: ctx, tone: tone, custom: custom, vocabulary: vocabulary, style: style),
                plausible(s, against: ruled) {
                 out = s
             }
         }
-        out = TextBrain.applyReplacements(out, p.replacements, vocabulary: p.vocabulary)
+        out = TextBrain.applyReplacements(out, p.replacements + learner.fixes, vocabulary: vocabulary)
         if tone == .veryCasual, !scribe {
             out = out.trimmingCharacters(in: .whitespaces)
             if out.hasSuffix("."), !out.dropLast().contains(".") { out.removeLast() }
@@ -270,6 +289,7 @@ final class Controller: ObservableObject {
 
     private func insertFromPanel() {
         let text = result.model.text
+        learnFromCard()
         result.hide()
         Task {
             await reactivateTarget()
@@ -278,7 +298,16 @@ final class Controller: ObservableObject {
         }
     }
 
+    /// You edited the text in the card: learn names, words and style from the changes.
+    private func learnFromCard() {
+        let edited = result.model.text
+        guard !delivered.isEmpty, edited != delivered else { return }
+        Learner.shared.corrected(original: delivered, edited: edited, category: ctx.category)
+        delivered = edited
+    }
+
     private func copyFromPanel() {
+        learnFromCard()
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(result.model.text, forType: .string)
         result.model.note = "✓ Copied to clipboard"

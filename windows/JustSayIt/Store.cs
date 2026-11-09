@@ -112,6 +112,22 @@ public class Prefs
 {
     public HotkeyChoice Hotkey { get; set; } = HotkeyChoice.RightAlt;
     public string Language { get; set; } = "auto";
+    /// Every language you speak (Whisper codes, e.g. "en", "es"). With two or more, each phrase is
+    /// recognised in the language it was spoken in, so you can switch without saying so.
+    public List<string> Languages { get; set; } = new();
+    /// Learn from my corrections, names and style (stays on this PC).
+    public bool LearningEnabled { get; set; } = true;
+    /// Tone for Scribe (writes a full message from what you say).
+    public Tone ScribeTone { get; set; } = Tone.Formal;
+
+    /// Languages to listen for: the list, or the single Language setting.
+    public List<string> SpokenLanguages()
+    {
+        var l = new List<string>();
+        foreach (var x in (Languages ?? new()).Prepend(Language ?? "auto"))
+            if (!string.IsNullOrWhiteSpace(x) && x != "auto" && !l.Contains(x)) l.Add(x);
+        return l.Take(4).ToList();
+    }
     public ModelSize Model { get; set; } = ModelSize.Small;
     public bool AiCleanup { get; set; } = true;
     public LocalModel LocalModel { get; set; } = LocalModel.Fast;
@@ -232,6 +248,8 @@ public class Store
         p.CiqAutoWhat ??= "both";
         p.CiqAutoWhere ??= "ddr";
         p.CiqDdrName ??= "";
+        p.Languages ??= new();
+        p.Language ??= "auto";
     }
 
     static T? Load<T>(string path)

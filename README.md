@@ -41,6 +41,8 @@ I wanted one tool that does two things well: lets me *write by talking* anywhere
 - **Snippets.** Say a short phrase to insert an address, a link, or a signature.
 - **Hotkeys.** Hold to talk, double-tap for hands-free, Shift for Scribe, Esc to cancel.
 - **Many languages**, all processed on-device (40+ on Mac, ~100 with auto-detect on Windows).
+- **Speak several languages without switching.** Pick up to four languages you speak (for example English and Spanish) and switch between them mid-sentence. Just Say It works out the language phrase by phrase, so you never have to say or change it.
+- **Gets smarter as you use it.** Fix a word in the result card and it learns: after the same fix twice it's corrected automatically, names you fix are recognised next time, and it learns which languages you use most and how you write in each app. All on your computer.
 - **Note Taker.** Press **Right Shift three times** to record and transcribe a conversation or call (you and the other side), with live transcript, speaker labels, automatic meeting notes and Markdown files. [More below](#note-taker).
 - **Send to CollectivIQ.** After each recording, sends your own prompt + the full transcript to a new CollectivIQ chat inside the app (sign in once in the app's CollectivIQ window).
 - **Records every live call automatically.** Join or answer a call in Microsoft Teams, Google Meet, Zoom, FaceTime, Cisco Webex, Slack Huddles, Discord, Skype, Whereby, Jitsi Meet, RingCentral (and RingCentral Video), GoTo Meeting, Zoho Meeting, Signal, WhatsApp and Telegram, in the app or in your browser, and the Note Taker records it until that call ends, then saves it and sends it to CollectivIQ straight away.
@@ -91,8 +93,17 @@ The installer builds the app on your Mac and puts it in `~/Applications`. If App
 | Line breaks | Say **"new line"** / **"new paragraph"** |
 | Note Taker (record a conversation) | Press **Right ⇧ Shift three times**; again to stop |
 | Cancel | **Esc** |
+| Close the result card | **Esc** (from anywhere, no mouse needed) |
 
-You can change the hotkey, language, tones, dictionary and snippets in the app window.
+You can change the hotkey, languages, tones, dictionary and snippets in the app window.
+
+### Speak in several languages
+
+In **Settings › Languages you speak**, pick your main language and up to three more (for example **English** and **Spanish**). Just Say It listens in all of them at the same time and keeps, for each phrase, the language that heard it best – so "Hi Maria, I wanted to confirm Thursday… necesito que me envíes el presupuesto… thanks, talk soon" comes out right without switching anything. The Note Taker uses the same languages.
+
+### Scribe: from what you say to a finished message
+
+Hold **⇧ Shift + Right ⌥** and say what you want, like "tell Laura yes, we can move it to Tuesday at 10, the Madrid numbers are 48 thousand euros". Scribe first lists every point, name and number you said, then writes the message addressed to the right person (it reads the email or chat on screen to know who and what you're replying to), in the language of the conversation, and checks no number was lost. Choose its tone (Formal by default) in **Settings › Scribe tone**.
 
 ## Note Taker
 
@@ -193,7 +204,7 @@ Then turn on **Join my calendar calls automatically**. The first time you join a
 
 **No administrator password needed.** Just Say It installs and runs for your Windows account only, so it works on work PCs and normal (non-admin) accounts.
 
-**Easiest:** download **`JustSayIt-Setup-2.4.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
+**Easiest:** download **`JustSayIt-Setup-2.5.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
 
 **Or** open PowerShell and paste:
 
@@ -284,6 +295,8 @@ The Mac app is plain Swift / SwiftUI with no third-party dependencies:
 | `Sources/JustSayIt/Controller.swift` | Record → clean up → insert flow |
 | `Sources/JustSayIt/Transcriber.swift` | On-device speech recognition |
 | `Sources/JustSayIt/TextBrain.swift` | Filler removal, corrections, tone, Scribe, Rewrite |
+| `Sources/JustSayIt/LanguageMix.swift` | Picks the right language for each phrase when you mix languages |
+| `Sources/JustSayIt/LearnCore.swift` / `Learner.swift` | Learns from your corrections, names, languages and style |
 | `Sources/JustSayIt/Context.swift` | Reads app, website, selection and screen context |
 | `Sources/JustSayIt/Inserter.swift` | Detects the app and pastes the text |
 | `Sources/JustSayIt/ResultPanel.swift` | Result card (Insert / Copy / Rewrite) |
@@ -321,6 +334,8 @@ The Windows app is C# / WinForms, using [Whisper.net](https://github.com/sandroh
 | `windows/JustSayIt/Controller.cs` | Record → clean up → insert flow |
 | `windows/JustSayIt/Transcriber.cs` | Microphone + on-device Whisper |
 | `windows/JustSayIt/TextBrain.cs` | Filler removal, corrections, tone, Scribe, Rewrite |
+| `windows/JustSayIt/LanguageMix.cs` | Splits speech into phrases and recognises each in its own language |
+| `windows/JustSayIt/LearnCore.cs` / `Learner.cs` | Learns from your corrections, names, languages and style |
 | `windows/JustSayIt/LocalAI.cs` | Built-in local AI (llama.cpp), model download and verification |
 | `windows/JustSayIt/Context.cs` | Reads app, browser URL, selection and text box via UI Automation |
 | `windows/JustSayIt/ScreenReader.cs` | Reads the visible window text with offline Windows OCR |

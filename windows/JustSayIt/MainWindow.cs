@@ -545,7 +545,56 @@ public sealed class MainWindow : Form
         foreach (var l in langs) lang.Items.Add(l.name);
         lang.SelectedIndex = Math.Max(0, Array.FindIndex(langs, l => l.code == p.Language));
         lang.SelectedIndexChanged += (_, _) => { p.Language = langs[lang.SelectedIndex].code; store.Save(); };
-        Row("Language", lang);
+        Row("Language 1 (main)", lang);
+
+        // Extra languages: with two or more, each phrase is recognised in the language it's spoken in.
+        p.Languages ??= new();
+        for (int i = 0; i < 3; i++)
+        {
+            var idx = i;
+            var extra = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
+            extra.Items.Add("None");
+            foreach (var l in langs.Skip(1)) extra.Items.Add(l.name);
+            var cur = idx < p.Languages.Count ? p.Languages[idx] : "";
+            var at = Array.FindIndex(langs, l => l.code == cur);
+            extra.SelectedIndex = at > 0 ? at : 0;
+            extra.SelectedIndexChanged += (_, _) =>
+            {
+                var list = p.Languages.ToList();
+                var code = extra.SelectedIndex == 0 ? "" : langs[extra.SelectedIndex].code;
+                while (list.Count <= idx) list.Add("");
+                list[idx] = code;
+                p.Languages = list.Where(x => x.Length > 0).Distinct().ToList();
+                store.Save();
+            };
+            Row($"Language {idx + 2}", extra);
+        }
+        Row("", L("Pick every language you speak (for example English and Spanish). Just Say It works out which one you're using, phrase by phrase – switch in the middle of a sentence without saying so. With languages set, Language 1 should be a language, not Auto-detect.", Small, Color.DimGray, 540));
+
+        var scribeTone = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
+        var scribeTones = new[] { Tone.Formal, Tone.Professional, Tone.Casual };
+        foreach (var t in scribeTones) scribeTone.Items.Add(Labels.Of(t));
+        scribeTone.SelectedIndex = Math.Max(0, Array.IndexOf(scribeTones, p.ScribeTone));
+        scribeTone.SelectedIndexChanged += (_, _) => { p.ScribeTone = scribeTones[scribeTone.SelectedIndex]; store.Save(); };
+        Row("Scribe tone (key + Shift)", scribeTone);
+
+        var learnRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        var learnOn = new CheckBox { Text = "Learn from my corrections, names and writing style (stays on this PC)", Checked = p.LearningEnabled, AutoSize = true };
+        learnOn.CheckedChanged += (_, _) => { p.LearningEnabled = learnOn.Checked; store.Save(); };
+        var learnStats = L("", Small, Color.DimGray, 540);
+        void RenderLearn()
+        {
+            var d = Learner.Shared.Data;
+            learnStats.Text = $"{d.Dictations} dictations · {d.Edits} corrections · {Learner.Shared.Fixes.Count} automatic fixes · {Learner.Shared.Terms.Count} names and terms. Fix a word in the result card before inserting: after the same fix twice it's corrected automatically.";
+        }
+        RenderLearn();
+        void OnLearn() => Ui.Run(() => { if (!IsDisposed) RenderLearn(); });
+        Learner.Shared.Changed += OnLearn;
+        FormClosed += (_, _) => Learner.Shared.Changed -= OnLearn;
+        var forget = new Button { Text = "Forget everything learned", AutoSize = true };
+        forget.Click += (_, _) => { if (MessageBox.Show("Forget everything Just Say It has learned?", "Just Say It", MessageBoxButtons.YesNo) == DialogResult.Yes) Learner.Shared.ForgetAll(); };
+        learnRow.Controls.AddRange(new Control[] { learnOn, learnStats, forget });
+        Row("Gets smarter as you use it", learnRow);
 
         var localModel = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 360 };
         foreach (LocalModel m in Enum.GetValues<LocalModel>()) localModel.Items.Add(LocalAI.Info(m).Label);

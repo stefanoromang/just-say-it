@@ -7,6 +7,7 @@ namespace JustSayIt;
 public sealed class ResultCard : Form
 {
     public event Action? InsertClicked;
+    public event Action? CopyClicked;
     public event Action<RewriteStyle>? RewriteClicked;
     public event Action? RawClicked;
 
@@ -65,7 +66,7 @@ public sealed class ResultCard : Form
 
         copy.Text = "Copy";
         copy.SetBounds(142, 240, 80, 32);
-        copy.Click += (_, _) => { Inserter.SetClipboard(box.Text); SetNote("✓ Copied to clipboard", true); };
+        copy.Click += (_, _) => { CopyClicked?.Invoke(); Inserter.SetClipboard(box.Text); SetNote("✓ Copied to clipboard", true); };
 
         rewrite.Text = "Rewrite ▾";
         rewrite.SetBounds(230, 240, 100, 32);

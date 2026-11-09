@@ -42,6 +42,11 @@ public sealed class Controller : IDisposable
         Hotkeys.Install();
 
         Card.InsertClicked += () => _ = InsertFromCard();
+        Card.CopyClicked += LearnFromCard;
+        cardShowing = false;
+        Card.VisibleChanged += (_, _) => cardShowing = Card.Visible;
+        Hotkeys.CardVisible = () => cardShowing && !Transcriber.IsRecording;
+        Hotkeys.CloseCard += () => Ui.Run(() => { if (Card.Visible) Card.Hide(); });
         Card.RewriteClicked += s => _ = RewriteCard(s);
         Card.RawClicked += () =>
         {
@@ -174,8 +179,9 @@ public sealed class Controller : IDisposable
             await Ui.Run(() => Overlay.ShowState(OverlayState.Thinking));
             Sound(false);
             var p = store.Prefs;
-            var vocab = p.Vocabulary.Concat(p.Replacements.Select(r => r.Write)).ToList();
-            var raw = await Transcriber.StopAndTranscribe(p.Model, p.Language, vocab);
+            var vocab = p.Vocabulary.Concat(p.Replacements.Select(r => r.Write)).Concat(Learner.Shared.Terms).Distinct().ToList();
+            Transcriber.LanguagePrior = Learner.Shared.LanguagePrior();
+            var raw = await Transcriber.StopAndTranscribe(p.Model, p.Language, vocab, p.SpokenLanguages());
             if (string.IsNullOrWhiteSpace(raw))
             {
                 await Ui.Run(() => Overlay.ShowState(OverlayState.Error, "Didn't hear anything – try again"));
@@ -191,6 +197,8 @@ public sealed class Controller : IDisposable
             var text = await Process(raw);
             if (string.IsNullOrWhiteSpace(text)) { await Ui.Run(() => Overlay.ShowState(OverlayState.Hidden)); return; }
             LastResult = text;
+            delivered = text;
+            Learner.Shared.Dictated(text, Transcriber.LastLanguages, ctx.Category);
             store.Record(new HistoryItem
             {
                 Date = DateTime.Now, Raw = raw, Final = text, App = ctx.AppName,
@@ -238,19 +246,24 @@ public sealed class Controller : IDisposable
         if (whole) return expanded;
         var tone = store.ToneFor(ctx.Category);
         p.CustomInstructions.TryGetValue(ctx.Category, out var custom);
-        var ruled = TextBrain.RuleClean(expanded);
+        var learner = Learner.Shared;
+        var fixes = learner.Fixes;
+        // Words you corrected twice or more are fixed before the AI sees them.
+        var ruled = TextBrain.ApplyReplacements(TextBrain.RuleClean(expanded), fixes, Array.Empty<string>());
+        var vocab = p.Vocabulary.Concat(learner.Terms.Where(t => !p.Vocabulary.Contains(t))).ToList();
+        var style = learner.Style(ctx.Category);
         var output = ruled;
 
         if (ctx.SelectedText != null && !scribe && TextBrain.LooksLikeEditCommand(ruled))
             output = await TextBrain.EditSelection(ctx.SelectedText, ruled, ctx, tone) ?? ruled;
         else if (scribe)
-            output = await TextBrain.Scribe(ruled, ctx, tone, custom) ?? ruled;
+            output = await TextBrain.Scribe(ruled, ctx, p.ScribeTone, custom, vocab, style) ?? ruled;
         else if (p.AiCleanup && (ruled.Split(' ').Length >= 3 || ruled.Contains('\n')))
         {
-            var s = await TextBrain.Polish(ruled, ctx, tone, custom, p.Vocabulary);
+            var s = await TextBrain.Polish(ruled, ctx, tone, custom, vocab, style);
             if (s != null && Plausible(s, ruled)) output = s;
         }
-        output = TextBrain.ApplyReplacements(output, p.Replacements, p.Vocabulary);
+        output = TextBrain.ApplyReplacements(output, p.Replacements.Concat(fixes), vocab);
         if (tone == Tone.VeryCasual && !scribe)
         {
             output = output.Trim();
@@ -284,9 +297,22 @@ public sealed class Controller : IDisposable
     async Task InsertFromCard()
     {
         var text = Card.Text2;
+        LearnFromCard();
         Card.Hide();
         await Inserter.Insert(text, ctx.Window, store.Prefs.RestoreClipboard);
         Overlay.ShowState(OverlayState.Done);
+    }
+
+    /// The text as delivered, to learn from what you change in the card.
+    string delivered = "";
+    volatile bool cardShowing;
+
+    void LearnFromCard()
+    {
+        var edited = Card.Text2;
+        if (delivered.Length == 0 || edited == delivered) return;
+        Learner.Shared.Corrected(delivered, edited, ctx.Category);
+        delivered = edited;
     }
 
     async Task RewriteCard(RewriteStyle s)

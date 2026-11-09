@@ -56,6 +56,22 @@ public static class SelfTest
             return (ok, $"\"{text}\" ({timer.ElapsedMilliseconds} ms)");
         }, 240);
 
+        await Step("Mixed languages: English → Spanish in one recording, no switching", async () =>
+        {
+            var es = SpanishVoice();
+            if (es == null) return (true, "no Spanish voice on this machine – phrase split and language detection checked in unit tests");
+            var a = Synthesize("Please confirm the meeting for Thursday at three.");
+            var b = Synthesize("Después necesito que me envíes el presupuesto del proyecto, por favor.", es);
+            var samples = a.Concat(b).ToArray();
+            using var t = new Transcriber();
+            var timer = Stopwatch.StartNew();
+            var text = await t.TranscribeSamples(samples, ModelSize.Base, "en", Array.Empty<string>(), new[] { "en", "es" });
+            var heard = text.ToLowerInvariant();
+            bool ok = heard.Contains("thursday") && (heard.Contains("presupuesto") || heard.Contains("proyecto"))
+                      && t.LastLanguages.Contains("en") && t.LastLanguages.Contains("es");
+            return (ok, $"\"{text}\" langs={string.Join(">", t.LastLanguages)} ({timer.ElapsedMilliseconds} ms)");
+        }, 240);
+
         // 2. Text cleanup rules (same code the app uses).
         await Step("Cleanup rules", () =>
         {
@@ -248,9 +264,20 @@ public static class SelfTest
         while (DateTime.Now < end) { Application.DoEvents(); await Task.Delay(20); }
     }
 
-    static float[] Synthesize(string text)
+    static string? SpanishVoice()
+    {
+        try
+        {
+            using var s = new SpeechSynthesizer();
+            return s.GetInstalledVoices().Select(v => v.VoiceInfo).FirstOrDefault(v => v.Culture.TwoLetterISOLanguageName == "es")?.Name;
+        }
+        catch { return null; }
+    }
+
+    static float[] Synthesize(string text, string? voice = null)
     {
         using var synth = new SpeechSynthesizer();
+        if (voice != null) synth.SelectVoice(voice);
         using var ms = new MemoryStream();
         synth.SetOutputToAudioStream(ms, new System.Speech.AudioFormat.SpeechAudioFormatInfo(16000, System.Speech.AudioFormat.AudioBitsPerSample.Sixteen, System.Speech.AudioFormat.AudioChannel.Mono));
         synth.Rate = -1;

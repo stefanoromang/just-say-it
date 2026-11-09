@@ -14,6 +14,8 @@
     <Compile Include="../JustSayIt/Store.cs" Link="Store.cs" />
     <Compile Include="../JustSayIt/MeetingLinks.cs" Link="MeetingLinks.cs" />
     <Compile Include="../JustSayIt/CallApps.cs" Link="CallApps.cs" />
+    <Compile Include="../JustSayIt/LanguageMix.cs" Link="LanguageMix.cs" />
+    <Compile Include="../JustSayIt/LearnCore.cs" Link="LearnCore.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -18,6 +18,9 @@ public sealed class Hotkeys : IDisposable
     public event Action? CancelRecording;
     public event Action? Rewrite;
     public event Action? TripleShift;
+    public event Action? CloseCard;
+    /// Is the result card showing? (read from the hook, so it must be cheap)
+    public Func<bool>? CardVisible;
 
     readonly List<DateTime> shiftTaps = new();
     DateTime? shiftDownAt;
@@ -82,6 +85,11 @@ public sealed class Hotkeys : IDisposable
             Reset();
             Later(CancelRecording);
             return 1;
+        }
+        if (isDown && vk == 0x1B && CardVisible?.Invoke() == true) // Esc closes the result card from anywhere
+        {
+            Later(CloseCard);
+            return CallNextHookEx(hook, code, wParam, lParam);
         }
         if (isDown && vk == 'R' && Down(0x11) && Down(0x12) && !Down(0x5B)) // Ctrl+Alt+R
         {

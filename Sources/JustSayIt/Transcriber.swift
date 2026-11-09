@@ -6,6 +6,8 @@ import Foundation
 import Speech
 
 /// Streams microphone audio into Apple's on-device SpeechAnalyzer.
+/// With several languages, the same audio is recognised in all of them at once and each phrase
+/// keeps the language that heard it best, so you can switch languages mid-sentence without saying so.
 /// Nothing leaves the Mac, and there is no usage limit.
 @MainActor
 final class Transcriber {
@@ -14,44 +16,48 @@ final class Transcriber {
 
     private let engine = AVAudioEngine()
     private var analyzer: SpeechAnalyzer?
-    private var transcriber: DictationTranscriber?
     private var continuation: AsyncStream<AnalyzerInput>.Continuation?
-    private var resultsTask: Task<Void, Never>?
+    private var resultsTasks: [Task<Void, Never>] = []
     private var converter: AVAudioConverter?
     private var analyzerFormat: AVAudioFormat?
-    private var finalText = ""
-    private var volatileText = ""
+    private var languages: [String] = []
+    /// Finalised words per language, plus the latest not-yet-final words.
+    private var finalWords: [String: [SpokenWord]] = [:]
+    private var volatileWords: [String: [SpokenWord]] = [:]
     private(set) var isRunning = false
-    private var preparedLocale: String?
+    /// The language chosen for each phrase of the last recording (used to learn which languages you use).
+    private(set) var lastPieces: [LanguageMix.Piece] = []
+    private var prepared: Set<String> = []
 
     /// Downloads the speech model for a language the first time it is used.
     func ensureModel(localeID: String) async throws {
-        let locale = Locale(identifier: localeID)
-        let t = DictationTranscriber(locale: locale, preset: .progressiveShortDictation)
+        let t = DictationTranscriber(locale: Locale(identifier: localeID), preset: .progressiveShortDictation)
         if let req = try await AssetInventory.assetInstallationRequest(supporting: [t]) {
             try await req.downloadAndInstall()
         }
+        prepared.insert(localeID)
     }
 
-    func start(localeID: String, vocabulary: [String]) async throws {
+    func start(localeIDs: [String], vocabulary: [String]) async throws {
         guard !isRunning else { return }
-        finalText = ""
-        volatileText = ""
+        let ids = localeIDs.isEmpty ? ["en_US"] : localeIDs
+        languages = ids
+        finalWords = [:]
+        volatileWords = [:]
+        lastPieces = []
+        for id in ids where !prepared.contains(id) { try await ensureModel(localeID: id) }
 
-        let locale = Locale(identifier: localeID)
-        if preparedLocale != localeID {
-            try await ensureModel(localeID: localeID)
-            preparedLocale = localeID
+        var modules: [(String, DictationTranscriber)] = []
+        for id in ids {
+            modules.append((id, DictationTranscriber(
+                locale: Locale(identifier: id),
+                contentHints: [.shortForm],
+                transcriptionOptions: [.punctuation],
+                reportingOptions: [.volatileResults, .frequentFinalization],
+                attributeOptions: ids.count > 1 ? [.transcriptionConfidence, .audioTimeRange] : [.audioTimeRange]
+            )))
         }
-
-        let t = DictationTranscriber(
-            locale: locale,
-            contentHints: [.shortForm],
-            transcriptionOptions: [.punctuation],
-            reportingOptions: [.volatileResults, .frequentFinalization],
-            attributeOptions: []
-        )
-        let a = SpeechAnalyzer(modules: [t], options: .init(priority: .userInitiated, modelRetention: .processLifetime))
+        let a = SpeechAnalyzer(modules: modules.map(\.1), options: .init(priority: .userInitiated, modelRetention: .processLifetime))
         if !vocabulary.isEmpty {
             let ctx = AnalysisContext()
             ctx.contextualStrings[.general] = vocabulary
@@ -60,7 +66,7 @@ final class Transcriber {
 
         let input = engine.inputNode
         let micFormat = input.outputFormat(forBus: 0)
-        guard let fmt = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [t], considering: micFormat) else {
+        guard let fmt = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: modules.map(\.1), considering: micFormat) else {
             throw NSError(domain: "JustSayIt", code: 1, userInfo: [NSLocalizedDescriptionKey: "No compatible audio format"])
         }
         analyzerFormat = fmt
@@ -69,25 +75,27 @@ final class Transcriber {
 
         let (stream, cont) = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .unbounded)
         continuation = cont
-        transcriber = t
         analyzer = a
 
-        resultsTask = Task { [weak self] in
-            do {
-                for try await r in t.results {
-                    let text = String(r.text.characters)
-                    await MainActor.run {
-                        guard let self else { return }
-                        if r.isFinal {
-                            self.finalText += text
-                            self.volatileText = ""
-                        } else {
-                            self.volatileText = text
+        resultsTasks = modules.map { (id, t) in
+            Task { [weak self] in
+                do {
+                    for try await r in t.results {
+                        let words = Self.words(r.text)
+                        let isFinal = r.isFinal
+                        await MainActor.run {
+                            guard let self else { return }
+                            if isFinal {
+                                self.finalWords[id, default: []].append(contentsOf: words)
+                                self.volatileWords[id] = []
+                            } else {
+                                self.volatileWords[id] = words
+                            }
+                            self.onPartial?(self.currentText())
                         }
-                        self.onPartial?(self.finalText + self.volatileText)
                     }
-                }
-            } catch {}
+                } catch {}
+            }
         }
 
         try await a.start(inputSequence: stream)
@@ -122,6 +130,23 @@ final class Transcriber {
         isRunning = true
     }
 
+    /// Words with timing and confidence from a recognised attributed string.
+    nonisolated static func words(_ s: AttributedString) -> [SpokenWord] {
+        s.runs.map { run in
+            let r = run.audioTimeRange
+            return SpokenWord(text: String(s[run.range].characters),
+                              start: r?.start.seconds ?? 0, end: r?.end.seconds ?? 0,
+                              confidence: run.transcriptionConfidence ?? 0.5)
+        }
+    }
+
+    private func currentText() -> String {
+        var all: [String: [SpokenWord]] = [:]
+        for id in languages { all[id] = (finalWords[id] ?? []) + (volatileWords[id] ?? []) }
+        if languages.count == 1 { return (all[languages[0]] ?? []).map(\.text).joined() }
+        return LanguageMix.text(all, languages: languages, prior: Learner.languagePrior())
+    }
+
     /// Stops recording and returns the full transcript.
     func stop() async -> String {
         guard isRunning else { return "" }
@@ -131,12 +156,16 @@ final class Transcriber {
         continuation?.finish()
         continuation = nil
         try? await analyzer?.finalizeAndFinishThroughEndOfInput()
-        _ = await resultsTask?.value
-        resultsTask = nil
+        for t in resultsTasks { _ = await t.value }
+        resultsTasks = []
         analyzer = nil
-        transcriber = nil
-        let text = (finalText + volatileText).trimmingCharacters(in: .whitespacesAndNewlines)
-        return text
+        var all: [String: [SpokenWord]] = [:]
+        for id in languages { all[id] = (finalWords[id] ?? []) + (volatileWords[id] ?? []) }
+        if languages.count > 1 {
+            lastPieces = LanguageMix.merge(all, languages: languages, prior: Learner.languagePrior())
+            return LanguageMix.join(lastPieces.map(\.text))
+        }
+        return (all[languages.first ?? ""] ?? []).map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func cancel() async {
@@ -147,8 +176,8 @@ final class Transcriber {
         continuation?.finish()
         continuation = nil
         await analyzer?.cancelAndFinishNow()
-        resultsTask?.cancel()
-        resultsTask = nil
+        for t in resultsTasks { t.cancel() }
+        resultsTasks = []
         analyzer = nil
     }
 }

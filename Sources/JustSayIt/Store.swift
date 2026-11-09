@@ -123,6 +123,20 @@ struct HistoryItem: Codable, Identifiable, Hashable {
 struct Prefs: Codable {
     var hotkey: HotkeyChoice = .rightOption
     var localeID: String = "en_US"
+    /// Every language you speak (first = main). With more than one, Just Say It works out which one
+    /// you're speaking phrase by phrase, so you can switch mid-sentence without saying so.
+    var languages: [String] = []
+    /// Learn from my corrections, names and style (stays on this Mac).
+    var learningEnabled = true
+    /// Tone for Scribe (writes a full message from what you say).
+    var scribeTone: Tone = .formal
+
+    /// The languages to listen for (never empty).
+    var spokenLanguages: [String] {
+        var out: [String] = []
+        for l in [localeID] + languages where !l.isEmpty && !out.contains(l) { out.append(l) }
+        return Array(out.prefix(4))
+    }
     var aiCleanup = true
     var playSounds = true
     var restoreClipboard = true
@@ -183,6 +197,9 @@ struct Prefs: Codable {
         let def = Prefs()
         hotkey = (try? c.decode(HotkeyChoice.self, forKey: .hotkey)) ?? def.hotkey
         localeID = (try? c.decode(String.self, forKey: .localeID)) ?? def.localeID
+        languages = (try? c.decode([String].self, forKey: .languages)) ?? []
+        learningEnabled = (try? c.decode(Bool.self, forKey: .learningEnabled)) ?? def.learningEnabled
+        scribeTone = (try? c.decode(Tone.self, forKey: .scribeTone)) ?? def.scribeTone
         aiCleanup = (try? c.decode(Bool.self, forKey: .aiCleanup)) ?? def.aiCleanup
         playSounds = (try? c.decode(Bool.self, forKey: .playSounds)) ?? def.playSounds
         restoreClipboard = (try? c.decode(Bool.self, forKey: .restoreClipboard)) ?? def.restoreClipboard

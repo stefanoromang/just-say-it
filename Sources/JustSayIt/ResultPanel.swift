@@ -74,6 +74,12 @@ struct ResultView: View {
 
 final class KeyPanel: NSPanel {
     override var canBecomeKey: Bool { true }
+    var onEscape: (() -> Void)?
+    /// Esc while the card is focused (including inside the text editor).
+    override func cancelOperation(_ sender: Any?) { onEscape?() }
+    override func keyDown(with e: NSEvent) {
+        if e.keyCode == 53 { onEscape?() } else { super.keyDown(with: e) }
+    }
 }
 
 @MainActor
@@ -110,6 +116,7 @@ final class ResultPanelController {
                 onRewrite: { [weak self] s in self?.onRewrite?(s) },
                 onRetry: { [weak self] in self?.onRetry?() },
                 onClose: { [weak self] in self?.hide() }))
+            p.onEscape = { [weak self] in self?.hide() }
             panel = p
         }
         guard let p = panel else { return }
@@ -119,7 +126,23 @@ final class ResultPanelController {
             p.setFrameOrigin(NSPoint(x: f.midX - p.frame.width / 2, y: f.minY + 80))
         }
         if focus { p.makeKeyAndOrderFront(nil) } else { p.orderFrontRegardless() }
+        watchEscape()
     }
 
     func hide() { panel?.orderOut(nil) }
+
+    private var escMonitor: Any?
+
+    /// Esc closes the card from anywhere, even when it isn't focused (it usually isn't after
+    /// inserting, so typing continues in your app). Only while the card is showing.
+    private func watchEscape() {
+        guard escMonitor == nil else { return }
+        escMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            guard e.keyCode == 53 else { return }
+            MainActor.assumeIsolated {
+                guard let self, self.isVisible, !Controller.shared.isDictating else { return }
+                self.hide()
+            }
+        }
+    }
 }

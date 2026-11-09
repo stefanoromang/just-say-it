@@ -324,16 +324,29 @@ public sealed class NoteTaker
     {
         if (factory == null) return "";
         var p = Store.Shared.Prefs;
-        await using var proc = factory.CreateBuilder()
-            .WithLanguage(string.IsNullOrWhiteSpace(p.Language) ? "auto" : p.Language)
-            .WithThreads(Math.Max(2, Environment.ProcessorCount - 1))
-            .WithNoContext()
-            .Build();
-        var sb = new StringBuilder();
-        await foreach (var seg in proc.ProcessAsync(samples)) sb.Append(seg.Text);
-        var t = sb.ToString().Trim();
-        t = System.Text.RegularExpressions.Regex.Replace(t, @"\[(BLANK_AUDIO|MUSIC|NOISE|SILENCE)[^\]]*\]", "").Trim();
-        return t;
+        var langs = p.SpokenLanguages();
+        // Several languages: each phrase of the chunk is recognised in the language it was spoken in.
+        var pieces = langs.Count >= 2
+            ? LanguageMix.Tag(samples, langs, (span, cands) =>
+              {
+                  using var det = factory.CreateBuilder().WithThreads(Math.Max(2, Environment.ProcessorCount - 1)).Build();
+                  var r = det.DetectLanguageWithProbability(span, cands);
+                  return (r.language, r.probability);
+              }, Learner.Shared.LanguagePrior())
+            : new List<LanguageMix.Piece> { new(0, samples.Length, langs.Count == 1 ? langs[0] : (string.IsNullOrWhiteSpace(p.Language) ? "auto" : p.Language)) };
+        var parts = new List<string>();
+        foreach (var piece in pieces)
+        {
+            await using var proc = factory.CreateBuilder()
+                .WithLanguage(piece.Language)
+                .WithThreads(Math.Max(2, Environment.ProcessorCount - 1))
+                .WithNoContext()
+                .Build();
+            var sb = new StringBuilder();
+            await foreach (var seg in proc.ProcessAsync(samples.AsMemory(piece.Start, piece.Length))) sb.Append(seg.Text);
+            parts.Add(System.Text.RegularExpressions.Regex.Replace(sb.ToString().Trim(), @"\[(BLANK_AUDIO|MUSIC|NOISE|SILENCE)[^\]]*\]", "").Trim());
+        }
+        return LanguageMix.Join(parts);
     }
 
     void Append(string speaker, double time, string text)

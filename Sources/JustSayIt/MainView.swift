@@ -408,15 +408,42 @@ struct SettingsPane: View {
             Picker("Dictation hotkey", selection: Binding(get: { store.prefs.hotkey }, set: { c.setHotkey($0) })) {
                 ForEach(HotkeyChoice.allCases) { Text($0.label).tag($0) }
             }
-            Picker("Language", selection: Binding(get: { store.prefs.localeID }, set: { v in
-                store.prefs.localeID = v
-                Task { await c.prepareModel() }
-            })) {
-                ForEach(f.locales, id: \.identifier) { l in
-                    Text(Locale.current.localizedString(forIdentifier: l.identifier) ?? l.identifier).tag(l.identifier)
+            Section {
+                Picker("Language 1 (main)", selection: Binding(get: { store.prefs.localeID }, set: { v in
+                    store.prefs.localeID = v
+                    store.prefs.languages.removeAll { $0 == v }
+                    Task { await c.prepareModel() }
+                })) {
+                    ForEach(f.locales, id: \.identifier) { l in Text(Controller.languageName(l.identifier)).tag(l.identifier) }
                 }
+                ForEach(0..<3, id: \.self) { i in
+                    Picker("Language \(i + 2)", selection: Binding(
+                        get: { i < store.prefs.languages.count ? store.prefs.languages[i] : "" },
+                        set: { v in
+                            var l = store.prefs.languages
+                            if i < l.count { l[i] = v } else if !v.isEmpty { l.append(v) }
+                            var seen: Set<String> = [store.prefs.localeID]
+                            store.prefs.languages = l.filter { !$0.isEmpty && seen.insert($0).inserted }
+                            Task { await c.prepareModel() }
+                        })) {
+                        Text("None").tag("")
+                        ForEach(f.locales.filter { $0.identifier != store.prefs.localeID }, id: \.identifier) { l in
+                            Text(Controller.languageName(l.identifier)).tag(l.identifier)
+                        }
+                    }
+                    .disabled(i > store.prefs.languages.count)
+                }
+            } header: {
+                Text("Languages you speak")
+            } footer: {
+                Text("Pick every language you speak (for example English and Spanish). Just Say It listens in all of them at once and works out which one you're using, phrase by phrase – switch in the middle of a sentence without saying so. Each extra language downloads once.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Picker("Scribe tone (hold the key + ⇧ Shift)", selection: $store.prefs.scribeTone) {
+                ForEach([Tone.formal, .professional, .casual]) { Text($0.label).tag($0) }
             }
             Toggle("Smart AI cleanup (fillers, self-corrections, lists, tone)", isOn: $store.prefs.aiCleanup)
+            LearningSection(store: store)
             Toggle("Insert automatically into the selected text box", isOn: $store.prefs.autoInsert)
             Toggle("Always show the result card (to edit, copy or rewrite)", isOn: $store.prefs.showResultCard)
             Toggle("Use what's on screen as context (needs Screen Recording)", isOn: $store.prefs.useScreenContext)
@@ -434,6 +461,41 @@ struct SettingsPane: View {
         .task {
             let all = await DictationTranscriber.supportedLocales
             f.locales = all.sorted { ($0.identifier) < ($1.identifier) }
+        }
+    }
+}
+
+/// Settings › Learning: what Just Say It has learned, and a way to reset it.
+struct LearningSection: View {
+    @ObservedObject var store: Store
+    @ObservedObject var learner = Learner.shared
+
+    var body: some View {
+        Section {
+            Toggle("Learn from my corrections, names and writing style", isOn: $store.prefs.learningEnabled)
+            if store.prefs.learningEnabled {
+                let d = learner.data
+                Text("\(d.dictations) dictations · \(d.edits) corrections · \(learner.fixes.count) automatic fixes · \(learner.terms.count) names and terms")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !learner.fixes.isEmpty {
+                    DisclosureGroup("Automatic fixes") {
+                        ForEach(learner.fixes, id: \.heard) { r in
+                            HStack {
+                                Text("\(r.heard) → \(r.write)")
+                                Spacer()
+                                Button(role: .destructive) { learner.forget(correction: r.heard) } label: { Image(systemName: "trash") }
+                                    .buttonStyle(.borderless)
+                            }
+                        }
+                    }
+                }
+                Button("Forget everything learned", role: .destructive) { learner.forgetAll() }
+            }
+        } header: {
+            Text("Gets smarter as you use it")
+        } footer: {
+            Text("When you fix a word in the result card before inserting, Just Say It remembers it: after the same fix twice it's corrected automatically, and names you fix are recognised next time. It also learns which languages you use most and how you write in each kind of app. Everything stays on this Mac.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }

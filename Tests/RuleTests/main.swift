@@ -108,6 +108,59 @@ var passed = 0
     check("gmail title", CallApps.service(forTitle: "Inbox - Gmail - Google Chrome") == nil)
     check("16 call apps", CallApps.services.count >= 16)
 
+    // Mixed languages: real word timings/confidences from an English → Spanish → English recording.
+    func w(_ t: String, _ a: Double, _ b: Double, _ c: Double) -> SpokenWord { SpokenWord(text: t, start: a, end: b, confidence: c) }
+    let en: [SpokenWord] = [w("Hi ", 0, 0.3, 0.35), w("Maria", 0.3, 0.8, 0.9), w(", ", 0.9, 0.9, 0.9), w("I ", 0.9, 1.0, 0.77),
+        w("wanted ", 1.0, 1.5, 0.91), w("to ", 1.5, 1.7, 0.93), w("confirm ", 1.7, 2.3, 0.78), w("the ", 2.3, 2.5, 0.69),
+        w("meeting ", 2.5, 2.8, 0.59), w("for ", 2.8, 3.0, 0.51), w("Thursday ", 3.0, 3.6, 0.83), w("at ", 3.6, 3.7, 0.84),
+        w("three ", 3.7, 4.2, 0.65), w("this ", 4.5, 5.4, 0.12), w("week ", 5.4, 5.6, 0.08), w("with ", 5.6, 5.9, 0.06),
+        w("the ", 5.9, 6.2, 0.15), w("project", 6.2, 8.0, 0.02), w(". ", 8.6, 8.6, 0.02), w("Thanks", 8.6, 9.1, 0.64),
+        w(". ", 9.2, 9.2, 0.64), w("Talk ", 9.2, 9.6, 0.67), w("soon", 9.6, 10.1, 0.68), w(".", 10.5, 10.5, 0.68)]
+    let es: [SpokenWord] = [w("Hi ", 0, 0.3, 0.23), w("Maria", 0.3, 0.8, 0.91), w(", ", 0.9, 0.9, 0.91), w("I ", 0.9, 1.0, 0.61),
+        w("wanted ", 1.0, 1.5, 0.76), w("to ", 1.5, 1.6, 0.88), w("confirm ", 1.6, 2.3, 0.63), w("the ", 2.3, 2.5, 0.79),
+        w("meeting ", 2.5, 2.9, 0.61), w("or ", 2.9, 3.0, 0.78), w("Thursday ", 3.0, 3.7, 0.83), w("at ", 3.7, 3.8, 0.78),
+        w("three", 3.8, 4.2, 0.85), w(". ", 4.7, 4.7, 0.85), w("Please ", 4.7, 4.9, 0.16), w("necesito ", 4.9, 5.4, 0.66),
+        w("que ", 5.4, 5.5, 0.85), w("me ", 5.5, 5.7, 0.82), w("envíes ", 5.7, 6.1, 0.8), w("el ", 6.1, 6.2, 0.93),
+        w("presupuesto ", 6.2, 6.8, 0.93), w("del ", 6.8, 6.9, 0.89), w("proyecto ", 6.9, 7.5, 0.94), w("por ", 7.5, 7.7, 0.94),
+        w("favor", 7.7, 8.1, 0.89), w(". ", 8.7, 8.7, 0.89), w("Thanks ", 8.7, 9.1, 0.46), w("Talk ", 9.3, 9.6, 0.46),
+        w("soon", 9.6, 10.1, 0.53), w(".", 10.5, 10.5, 0.53)]
+    let mixed = LanguageMix.merge(["en_US": en, "es_MX": es], languages: ["en_US", "es_MX"])
+    check("mix: 3 pieces en/es/en", mixed.map(\.language) == ["en_US", "es_MX", "en_US"])
+    let mixedText = LanguageMix.join(mixed.map(\.text))
+    check("mix: English kept", mixedText.hasPrefix("Hi Maria, I wanted to confirm the meeting for Thursday at three"))
+    check("mix: Spanish kept", mixedText.contains("necesito que me envíes el presupuesto del proyecto por favor"))
+    check("mix: ends in English", mixedText.hasSuffix("Thanks. Talk soon.") || { print("   got:", mixedText); return false }())
+    check("mix: single language unchanged", LanguageMix.text(["en_US": en], languages: ["en_US"]).hasPrefix("Hi Maria"))
+    check("reads as Spanish", LanguageMix.readsAs("necesito que me envíes el presupuesto del proyecto", language: "es_MX") > 0.5)
+    check("reads as English", LanguageMix.readsAs("I wanted to confirm the meeting for Thursday", language: "es_MX") < 0.3)
+    check("join adds sentence break", LanguageMix.join(["hello there", "Gracias"]) == "hello there. Gracias")
+    // Live merging (Note Taker): phrases come out once both languages are done with them.
+    let live = LanguageMix.Stream(languages: ["en_US", "es_MX"])
+    live.add("en_US", Array(en.prefix(13)), through: 4.3)
+    check("stream waits for all languages", live.drain().isEmpty)
+    live.add("es_MX", Array(es.prefix(13)), through: 4.3)
+    live.add("en_US", Array(en.dropFirst(13)), through: 10.5)
+    live.add("es_MX", Array(es.dropFirst(13)), through: 10.5)
+    let streamed = live.drain(final: true)
+    check("stream final en/es/en", streamed.map(\.language) == ["en_US", "es_MX", "en_US"])
+
+    // Learning from corrections
+    let subs = LearnCore.substitutions(from: "Please send it to Mark at Acme by Friday", to: "Please send it to Marc at ACME by Friday")
+    check("learns name fix", subs.contains { $0.0 == "Mark" && $0.1 == "Marc" })
+    check("learns casing fix", subs.contains { $0.0 == "Acme" && $0.1 == "ACME" })
+    check("ignores big rewrites", LearnCore.substitutions(from: "can you send me the report", to: "Kindly forward the quarterly summary document to me at your earliest convenience").isEmpty)
+    var learning = Learning()
+    LearnCore.learn(&learning, original: "Talk to Mark tomorrow", edited: "Talk to Marc tomorrow")
+    check("one correction isn't automatic yet", LearnCore.learnedFixes(learning).isEmpty)
+    LearnCore.learn(&learning, original: "Mark said yes", edited: "Marc said yes")
+    check("two corrections become automatic", LearnCore.learnedFixes(learning).contains { $0.heard == "mark" && $0.write == "Marc" })
+    check("name learned as a term", LearnCore.learnedTerms(learning).contains("Marc"))
+    for _ in 0..<8 { learning.languageCounts["en_US", default: 0] += 1 }
+    learning.languageCounts["es_MX"] = 2
+    check("language prior", abs((LearnCore.languagePrior(learning)["en_US"] ?? 0) - 0.8) < 0.001)
+    LearnCore.remember(&learning, example: "Hi team, the launch moves to Monday. Thanks!", category: "work")
+    check("style example kept", LearnCore.styleBlock(learning, category: "work")?.contains("launch moves") == true)
+
     print(failures == 0 ? "✓ All \(passed) Mac rule tests passed" : "\(failures) failed, \(passed) passed")
     exit(failures == 0 ? 0 : 1)
 }

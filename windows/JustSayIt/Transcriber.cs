@@ -101,7 +101,7 @@ public sealed class Transcriber : IDisposable
     }
 
     /// Stops recording and returns the transcript.
-    public async Task<string> StopAndTranscribe(ModelSize model, string language, IEnumerable<string> vocabulary)
+    public async Task<string> StopAndTranscribe(ModelSize model, string language, IEnumerable<string> vocabulary, IReadOnlyList<string>? languages = null)
     {
         if (!IsRecording) return "";
         IsRecording = false;
@@ -117,30 +117,60 @@ public sealed class Transcriber : IDisposable
             samples = new float[bytes.Length / 2];
             for (int i = 0; i < samples.Length; i++) samples[i] = BitConverter.ToInt16(bytes, i * 2) / 32768f;
         }
-        return await TranscribeSamples(samples, model, language, vocabulary);
+        return await TranscribeSamples(samples, model, language, vocabulary, languages);
     }
 
-    /// Transcribes 16 kHz mono samples (also used by the self-test).
-    public async Task<string> TranscribeSamples(float[] samples, ModelSize model, string language, IEnumerable<string> vocabulary)
+    /// The language picked for each phrase of the last recording (to learn which languages you use).
+    public List<string> LastLanguages { get; private set; } = new();
+
+    /// Transcribes 16 kHz mono samples (also used by the self-test). With several languages, each
+    /// phrase (split at pauses) is recognised in the language it was spoken in, so you can switch
+    /// languages mid-sentence without saying so.
+    public async Task<string> TranscribeSamples(float[] samples, ModelSize model, string language, IEnumerable<string> vocabulary,
+                                                IReadOnlyList<string>? languages = null)
     {
         if (samples.Length < 16000 / 4) return "";
+        var langs = (languages ?? Array.Empty<string>()).Where(l => !string.IsNullOrWhiteSpace(l) && l != "auto").Distinct().ToList();
 
         return await Task.Run(async () =>
         {
             EnsureFactory(model);
-            var builder = factory!.CreateBuilder()
-                .WithLanguage(string.IsNullOrWhiteSpace(language) ? "auto" : language)
-                .WithThreads(Math.Max(2, Environment.ProcessorCount - 1))
-                .WithNoContext()
-                .WithSingleSegment();
             var vocab = string.Join(", ", vocabulary.Where(v => !string.IsNullOrWhiteSpace(v)).Take(60));
-            if (vocab.Length > 0) builder = builder.WithPrompt("Vocabulary: " + vocab + ".");
-            await using var processor = builder.Build();
-            var sb = new System.Text.StringBuilder();
-            await foreach (var seg in processor.ProcessAsync(samples))
-                sb.Append(seg.Text);
-            return CleanWhisperArtifacts(sb.ToString());
+            if (langs.Count < 2)
+            {
+                var one = langs.Count == 1 ? langs[0] : (string.IsNullOrWhiteSpace(language) ? "auto" : language);
+                LastLanguages = new() { one };
+                return CleanWhisperArtifacts(await Recognize(samples, one, vocab, single: true));
+            }
+            var pieces = LanguageMix.Tag(samples, langs, (span, cands) =>
+            {
+                using var det = factory!.CreateBuilder().WithThreads(Math.Max(2, Environment.ProcessorCount - 1)).Build();
+                var r = det.DetectLanguageWithProbability(span, cands);
+                return (r.language, r.probability);
+            }, LanguagePrior);
+            LastLanguages = pieces.Select(p => p.Language).ToList();
+            var parts = new List<string>();
+            foreach (var p in pieces)
+                parts.Add(CleanWhisperArtifacts(await Recognize(samples.AsMemory(p.Start, p.Length).ToArray(), p.Language, vocab, single: false)));
+            return LanguageMix.Join(parts);
         });
+    }
+
+    /// Learned share of each language (helps close calls); set by the controller.
+    public Dictionary<string, double> LanguagePrior { get; set; } = new();
+
+    async Task<string> Recognize(float[] samples, string lang, string vocab, bool single)
+    {
+        var builder = factory!.CreateBuilder()
+            .WithLanguage(lang)
+            .WithThreads(Math.Max(2, Environment.ProcessorCount - 1))
+            .WithNoContext();
+        if (single) builder = builder.WithSingleSegment();
+        if (vocab.Length > 0) builder = builder.WithPrompt("Vocabulary: " + vocab + ".");
+        await using var processor = builder.Build();
+        var sb = new System.Text.StringBuilder();
+        await foreach (var seg in processor.ProcessAsync(samples)) sb.Append(seg.Text);
+        return sb.ToString();
     }
 
     static string CleanWhisperArtifacts(string s)

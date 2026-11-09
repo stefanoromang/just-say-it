@@ -96,7 +96,6 @@ final class NoteTaker: ObservableObject {
         defer { isStarting = false }
         if !keepMeeting { meeting = nil }
         let store = Store.shared
-        let locale = Locale(identifier: store.prefs.localeID)
         lines = []
         live = [:]
         status = "Starting…"
@@ -104,12 +103,13 @@ final class NoteTaker: ObservableObject {
         context = meeting.map { "\($0.link.platform.rawValue) – \($0.title)" } ?? front.name
 
         do {
-            try await TranscriptPipe.ensureModel(locale: locale)
+            let langs = store.prefs.spokenLanguages
+            try await TranscriptPipe.ensureModels(langs)
 
             // Your microphone.
             let mic = TranscriptPipe()
             wire(mic, speaker: "Me")
-            try await mic.start(locale: locale)
+            try await mic.start(languages: langs)
             let input = engine.inputNode
             let micFormat = input.outputFormat(forBus: 0)
             input.installTap(onBus: 0, bufferSize: 4096, format: micFormat) { buf, _ in mic.feed(buf) }
@@ -123,7 +123,7 @@ final class NoteTaker: ObservableObject {
                 let sys = TranscriptPipe()
                 wire(sys, speaker: "Others")
                 do {
-                    try await sys.start(locale: locale)
+                    try await sys.start(languages: langs)
                     let cap = SystemAudioCapture()
                     cap.onBuffer = { sys.feed($0) }
                     try await cap.start()

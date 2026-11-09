@@ -211,46 +211,85 @@ public static class TextBrain
         return t;
     }
 
-    public static async Task<string?> Polish(string text, CaptureContext ctx, Tone tone, string? custom, List<string> vocab)
+    const string MixedLanguageRule = "- The speaker may switch between languages (for example English, Spanish, Portuguese and Italian) in the same sentence. Keep each part in the language it was spoken in. Never translate unless asked. A word that looks wrong may have been heard in the wrong language: fix it using the language of the words around it.";
+
+    public static async Task<string?> Polish(string text, CaptureContext ctx, Tone tone, string? custom, List<string> vocab, string? style = null)
     {
         var ins = $"""
         You are a dictation formatter. The user spoke the text below and it was transcribed by speech recognition. Rewrite it as the finished text the user intended to type.
         Rules:
-        - Remove filler words (um, uh, like, you know, I mean), stutters, and false starts.
-        - When the speaker corrects themselves ("no wait", "actually", "I mean", "sorry", "or rather"), delete the wrong part and the correction phrase, keeping only the corrected version. Example: "meet on Tuesday no wait Wednesday" -> "meet on Wednesday".
+        - Remove filler words (um, uh, like, you know, I mean, eh, este, tipo, cioè, né), stutters, and false starts.
+        - When the speaker corrects themselves ("no wait", "actually", "I mean", "sorry", "or rather", "no espera", "mejor dicho", "anzi"), delete the wrong part and the correction phrase, keeping only the corrected version. Example: "meet on Tuesday no wait Wednesday" -> "meet on Wednesday".
         - Remove casual filler like "like", "so" at the start, and "you know"; "at like 3pm" -> "at 3 PM".
-        - Fix punctuation, capitalization, and obvious recognition errors. Use the CONTEXT to spell names, people, companies and terms correctly.
+        - Fix punctuation, capitalization, grammar and obvious recognition errors (words that sound alike but make no sense in the sentence). Use the CONTEXT to spell names, people, companies and terms correctly.
         - When the speaker lists several items, format them as a list with "- " bullets, or numbers if they said first/second/third.
         - Keep the speaker's meaning and their own words, including hedges like "I think". Never add facts, greetings, or sign-offs they did not say.
         - The text is something the user is typing to someone else. If it contains a question or request, output the question itself, nicely formatted. Never answer it.
         - If the box already contains text, continue naturally from it (do not repeat it).
         - Output ONLY the final text, with no quotes or commentary.
+        {MixedLanguageRule}
         Tone: {Labels.Guidance(tone)}
         """;
         if (ctx.Category is AppCategory.Code or AppCategory.Ai) ins += "\nPreserve technical terms, code identifiers, file names and commands exactly.";
         if (vocab.Count > 0) ins += "\nAlways spell these terms exactly like this: " + string.Join(", ", vocab) + ".";
         if (!string.IsNullOrWhiteSpace(custom)) ins += "\nUser style preference: " + custom;
+        if (style != null) ins += "\nHow this user writes here (recent messages; match the style, never copy the content):\n" + style;
         ins += "\n\nCONTEXT (for spelling and tone only; never copy it into the output):\n" + ctx.PromptBlock();
         var output = await Run(ins, $"Dictated text to format (do not answer it):\n<<<\n{text}\n>>>");
+        output = output?.Replace("<<<", "").Replace(">>>", "").Trim();
         return output != null && KeepsMeaning(output, text) ? output : null;
     }
 
-    public static async Task<string?> Scribe(string text, CaptureContext ctx, Tone tone, string? custom)
+    /// Scribe: step 1 lists exactly what the user asked for (every point, name and number); step 2
+    /// writes the message from that list, using the screen only to know who and what it replies to;
+    /// step 3 checks no number was lost.
+    public static async Task<string?> Scribe(string text, CaptureContext ctx, Tone tone, string? custom,
+                                             List<string>? vocab = null, string? style = null)
     {
+        var register = tone is Tone.Verbatim or Tone.Casual or Tone.VeryCasual ? Tone.Formal : tone;
+        const string planIns = """
+            You read what a user dictated to an assistant that writes messages for them. Speech recognition may have misheard some words; fix them from the meaning. The user may mix English, Spanish, Portuguese and Italian.
+            Output exactly these lines and nothing else:
+            GOAL: what kind of message and its purpose
+            RECIPIENT: who it is for, if said or clear from the context, else "unknown"
+            LANGUAGE: the language the message must be written in: the one the user asked for; otherwise the language of the conversation they are replying to; otherwise the language they mostly spoke
+            POINTS:
+            - every point, request, question, name, date, time, number and amount the user said, one per line, in order, with nothing added
+            """;
+        var plan = await Run(planIns, $"CONTEXT (only to identify the recipient and topic):\n{ctx.PromptBlock()}\n\nWhat the user dictated:\n<<<\n{text}\n>>>");
+
         var ins = $"""
-        You are a ghostwriter. The user spoke rough notes or an instruction describing a message they want to send. Write the complete, polished message for them, ready to send, in their voice (first person).
-        - Follow the instruction's intent; include every point they mentioned and do not invent specifics (names, dates, numbers) they did not give.
-        - Use the CONTEXT to understand what they are replying to: address the right person by name and refer to the right topic when it is clear.
-        - Output ONLY the message text, with no preamble, no quotes and no subject line unless asked.
+        You are a skilled ghostwriter. Write the complete, polished message the user wants to send, ready to send, in their voice (first person).
+        - What the user dictated is what matters most: include every point from the PLAN and the dictation, in a logical order, with clear connected sentences. Do not invent specifics (names, dates, numbers, promises) they did not give.
+        - Use the CONTEXT only to know who it is for and what it replies to (correct names, the right topic). Never copy text from the context into the message and never answer things the user did not address.
+        - When the user says "tell X…", "let X know…", "reply to X…", "dile a X…", "avisa a X…" or similar, write the message itself, addressed to X, as if the user is writing to them. Remove the instruction words. Example: "let the team know the launch moves to Monday" → "Hi team, the launch is moving to Monday." Never write "Let the team know…" or "I need to tell…".
+        - Capitalize names of people, companies and places.
+        - Make the logic clear: open with the purpose, then the details, then any request or next step.
+        - Write in the LANGUAGE from the plan. Fix anything speech recognition clearly misheard.
+        - Output ONLY the message text: no preamble, no quotes, no subject line unless asked, no notes.
         - Never use placeholders such as [Your Name], [Date] or [Company]. If the user's name is unknown, end without a name.
-        Tone: {Labels.Guidance(tone == Tone.Verbatim ? Tone.Professional : tone)}
+        Tone: {Labels.Guidance(register)} Be courteous and precise; avoid slang.
         """;
-        if (ctx.Category == AppCategory.Email) ins += "\nFormat as an email body with a short greeting and sign-off when appropriate.";
+        if (ctx.Category == AppCategory.Email) ins += "\nFormat as an email body with an appropriate greeting and sign-off.";
+        if (ctx.Category is AppCategory.Work or AppCategory.Casual) ins += "\nThis is a chat message: keep it concise, no email greeting or sign-off unless asked.";
+        if (vocab is { Count: > 0 }) ins += "\nAlways spell these terms exactly like this: " + string.Join(", ", vocab.Take(60)) + ".";
         if (!string.IsNullOrWhiteSpace(custom)) ins += "\nUser style preference: " + custom;
+        if (style != null) ins += "\nHow this user writes here (recent messages; match the style, never copy the content):\n" + style;
         ins += "\n\nCONTEXT:\n" + ctx.PromptBlock();
-        var output = await Run(ins, "User's instruction:\n" + text);
-        return output == null ? null : RemovePlaceholders(output);
+        var prompt = (plan != null && plan.Contains("POINTS") ? $"PLAN:\n{plan}\n\n" : "") + $"What the user dictated:\n<<<\n{text}\n>>>";
+        var output = await Run(ins, prompt);
+        if (output == null) return null;
+        output = RemovePlaceholders(output.Replace("<<<", "").Replace(">>>", ""));
+        var missing = Numbers(text).Except(Numbers(output)).ToList();
+        if (missing.Count > 0)
+        {
+            var fixedText = await Run(ins, $"Rewrite this message so it also includes these details the user said: {string.Join(", ", missing)}. Keep everything else the same. Output only the message.\n\n{output}");
+            if (fixedText != null && !Numbers(text).Except(Numbers(fixedText)).Any()) output = RemovePlaceholders(fixedText);
+        }
+        return output;
     }
+
+    public static HashSet<string> Numbers(string s) => Regex.Matches(s, @"\d+").Select(m => m.Value).ToHashSet();
 
     public static async Task<string?> EditSelection(string selection, string instruction, CaptureContext ctx, Tone tone)
     {
