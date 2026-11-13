@@ -169,6 +169,22 @@ var passed = 0
     check("route: wait ignored", CiqRoute.Route.parse("wait") == nil)
     check("chat models", CiqRoute.chatModels == ["Gemini", "Nemotron"])
 
+    let vtt = MeetingTranscript.parse("WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n<v María Rossi>Hello &amp; welcome.</v>\n\n00:00:04.000 --> 00:00:05.000\n<v Stefano>Thank you.</v>")
+    check("VTT names", vtt.count == 2 && vtt[0].speaker == "María Rossi" && vtt[1].speaker == "Stefano")
+    check("VTT entities", vtt.first?.text == "Hello & welcome.")
+    check("SRT speaker", MeetingTranscript.parse("1\n00:00:01,000 --> 00:00:02,000\nAna: Hola.").first?.speaker == "Ana")
+    check("anonymous stays anonymous", MeetingTranscript.parse("Unattributed speech.").first?.speaker == "Speaker")
+    var captionRows: [MeetingCaption] = [], captionSession: String?
+    let caption = MeetingCaption(service: "meet", session: "first", segment: "1", speaker: "Ana", text: "Hello", received: 1)
+    let revised = MeetingCaption(service: "meet", session: "first", segment: "1", speaker: "Ana", text: "Hello everyone.", received: 2)
+    let other = MeetingCaption(service: "meet", session: "second", segment: "1", speaker: "Other", text: "Wrong meeting", received: 3)
+    MeetingTranscript.merge([caption, revised, other], into: &captionRows, session: &captionSession)
+    check("caption revisions deduplicated", captionRows.count == 1 && captionRows[0].text == "Hello everyone.")
+    check("caption sessions isolated", captionSession == "first" && captionRows[0].speaker == "Ana")
+    check("platform source labelled", MeetingTranscript.combined(local: "Me: local", captions: captionRows).contains("LOCAL AUDIO BACKUP"))
+    check("captions off by default", !Prefs().captureMeetingCaptions)
+    check("auto installs on by default", Prefs().installUpdatesAutomatically)
+
     print(failures == 0 ? "✓ All \(passed) Mac rule tests passed" : "\(failures) failed, \(passed) passed")
     exit(failures == 0 ? 0 : 1)
 }

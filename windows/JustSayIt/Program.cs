@@ -14,6 +14,7 @@ static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        if (args.Any(a => a.StartsWith("chrome-extension://", StringComparison.Ordinal))) { CaptionConnector.NativeHost(); return; }
         if (args.Length > 0 && args[0] == "--download-models")
         {
             // Run by the installer: fetch the speech model and the built-in local AI, then exit.
@@ -52,6 +53,9 @@ static class Program
         if (!first) return;
 
         ApplicationConfiguration.Initialize();
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) => LogError(e.Exception);
+        TaskScheduler.UnobservedTaskException += (_, e) => { LogError(e.Exception); e.SetObserved(); };
         try
         {
             using var s = typeof(Program).Assembly.GetManifestResourceStream("JustSayIt.AppIcon.ico");
@@ -129,6 +133,11 @@ sealed class TrayApp : ApplicationContext
         if (NoteTaker.Shared.IsRecording) menu.Items.Add("■ End Note Taker and send", null, (_, _) => NoteTaker.Shared.EndByUser());
         else menu.Items.Add("Start Note Taker (Right Shift ×3)", null, (_, _) => c.ToggleNotes());
         menu.Items.Add("Show Note Taker", null, (_, _) => NoteWindow.ShowShared());
+        var captions = new ToolStripMenuItem("Add Teams / Meet captions") { Checked = Store.Shared.Prefs.CaptureMeetingCaptions, CheckOnClick = true };
+        captions.CheckedChanged += (_, _) => { Store.Shared.Prefs.CaptureMeetingCaptions = captions.Checked; Store.Shared.Save(); };
+        menu.Items.Add(captions);
+        menu.Items.Add(new ToolStripMenuItem("Import meeting transcript…", null, (_, _) => CaptionConnector.Shared.Import()) { Enabled = NoteTaker.Shared.IsRecording });
+        menu.Items.Add("Set up caption connector…", null, (_, _) => CaptionConnector.OpenSetup());
         var next = AutoJoin.Shared.Upcoming.FirstOrDefault(m => m.End > DateTime.Now);
         if (next != null) menu.Items.Add($"Join now: {next.Title} ({next.Start:t})", null, (_, _) => AutoJoin.Shared.Join(next));
         var rw = new ToolStripMenuItem("Rewrite Selected Text");

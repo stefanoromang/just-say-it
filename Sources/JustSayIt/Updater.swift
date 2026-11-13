@@ -22,6 +22,15 @@ final class Updater: ObservableObject {
     var updateAvailable: Bool { latest.map { Self.isNewer($0, than: current) } ?? false }
 
     private var timer: Timer?
+    private var checking = false
+    private var lastAttempt = Date.distantPast
+    private var lastInstallAttempt = Date.distantPast
+    private var idleSince: Date?
+
+    private var busy: Bool {
+        NoteTaker.shared.isBusy || Controller.shared.isDictating || Controller.shared.isWorking
+            || Controller.shared.result.isVisible || CIQSender.shared.isBusy || CallWatcher.shared.activeCall != nil
+    }
 
     func boot() {
         // Wait until the menu-bar app has finished launching before showing any alert.
@@ -29,13 +38,23 @@ final class Updater: ObservableObject {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             await check(userInitiated: false)
         }
-        timer = Timer.scheduledTimer(withTimeInterval: 24 * 3600, repeats: true) { _ in
+        let t = Timer(timeInterval: 60, repeats: true) { _ in
             MainActor.assumeIsolated { Updater.shared.dailyCheck() }
         }
+        RunLoop.main.add(t, forMode: .common); timer = t
     }
 
     private func dailyCheck() {
-        Task { @MainActor in await self.check(userInitiated: false) }
+        guard Store.shared.prefs.checkForUpdates, !installing else { return }
+            if Date().timeIntervalSince(lastAttempt) >= 24 * 3600 {
+            Task { @MainActor in await self.check(userInitiated: false) }
+        }
+        if busy { idleSince = nil; return }
+        if idleSince == nil { idleSince = Date() }
+        if Store.shared.prefs.installUpdatesAutomatically, updateAvailable,
+           Date().timeIntervalSince(idleSince!) >= 60, Date().timeIntervalSince(lastInstallAttempt) >= 3600 {
+            install()
+        }
     }
 
     static func log(_ s: String) {
@@ -67,6 +86,9 @@ final class Updater: ObservableObject {
 
     func check(userInitiated: Bool) async {
         guard Store.shared.prefs.checkForUpdates || userInitiated else { return }
+        guard !checking, !installing else { return }
+        checking = true; lastAttempt = Date()
+        defer { checking = false }
         status = "Checking for updates…"
         do {
             var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!)
@@ -83,13 +105,18 @@ final class Updater: ObservableObject {
                 notes = ""
             }
             lastChecked = Date()
-            Self.log("checked: current=\(current) latest=\(latest ?? "nil") available=\(updateAvailable)")
+            guard let latest, latest.range(of: #"^\d+\.\d+(\.\d+)?$"#, options: .regularExpression) != nil else {
+                throw URLError(.cannotParseResponse)
+            }
+            Self.log("checked: current=\(current) latest=\(latest) available=\(updateAvailable)")
             if updateAvailable {
-                status = "Version \(latest!) is available (you have \(current))."
-                if !userInitiated && Store.shared.prefs.skippedVersion != latest {
+                status = "Version \(latest) is available (you have \(current))."
+                if Store.shared.prefs.installUpdatesAutomatically {
+                    status += " Installs automatically when idle; recordings are never interrupted."
+                } else if !userInitiated && Store.shared.prefs.skippedVersion != latest {
                     // Never interrupt a recording or a CollectivIQ send with the update dialog.
-                    if NoteTaker.shared.isBusy || CIQSender.shared.isBusy {
-                        CollectivIQ.notify("Just Say It \(latest!) is available", "Install it from the menu bar when your call is over.")
+                    if busy {
+                        CollectivIQ.notify("Just Say It \(latest) is available", "Install it from the menu bar when your call is over.")
                     } else {
                         prompt()
                     }
@@ -137,29 +164,37 @@ final class Updater: ObservableObject {
     /// Runs the official installer in the background, then relaunches the app.
     func install() {
         guard !installing else { return }
-        if NoteTaker.shared.isBusy || CIQSender.shared.isBusy {
+        guard updateAvailable else { status = "No newer published release is available."; return }
+        if busy {
             status = "Finish or end the Note Taker first – the update installs after your notes are saved and sent."
             Controller.shared.overlay.show(.error("End the Note Taker before updating"))
             return
         }
+        guard let version = latest, version.range(of: #"^\d+\.\d+(\.\d+)?$"#, options: .regularExpression) != nil else { return }
         installing = true
+        lastInstallAttempt = Date()
         status = "Downloading and building the update… (about a minute)"
         let log = FileManager.default.temporaryDirectory.appendingPathComponent("just-say-it-update.log")
         let script = """
-        set -o pipefail
-        curl -fsSL https://raw.githubusercontent.com/\(Self.repo)/main/install-mac.sh \
-          | sed 's|^open "$HOME/Applications/Just Say It.app"|# relaunch handled by updater|' \
-          | /bin/zsh > '\(log.path)' 2>&1
+        set -euo pipefail
+        SRC=$(mktemp -d "${TMPDIR:-/tmp}/justsayit-update.XXXXXX")
+        trap 'rm -rf "$SRC"' EXIT
+        git clone --depth 1 --branch v\(version) https://github.com/\(Self.repo).git "$SRC/source"
+        cd "$SRC/source"
+        ./build-app.sh
         """
         Task.detached {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            p.arguments = ["-c", script]
+            p.arguments = ["-c", "exec > '\(log.path)' 2>&1\n" + script]
             var env = ProcessInfo.processInfo.environment
             env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin"
             env["JUSTSAYIT_UPDATER"] = "1"
             p.environment = env
-            do { try p.run() } catch {}
+            do { try p.run() } catch {
+                await MainActor.run { Updater.shared.installing = false; Updater.shared.status = "Update could not start: \(error.localizedDescription)" }
+                return
+            }
             p.waitUntilExit()
             let ok = p.terminationStatus == 0
             await MainActor.run {

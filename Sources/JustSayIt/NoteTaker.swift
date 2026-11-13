@@ -31,6 +31,8 @@ final class NoteTaker: ObservableObject {
     @Published private(set) var isStarting = false
     /// Number of finished recordings still writing their smart transcript / summary.
     @Published private(set) var finishing = 0
+    private var draining = false
+    private var generation = UUID()
     /// Recording, starting, or still saving a finished one.
     var isBusy: Bool { isRecording || isStarting || finishing > 0 }
     @Published private(set) var lines: [NoteLine] = []
@@ -77,7 +79,7 @@ final class NoteTaker: ObservableObject {
     /// Starts notes for a calendar meeting (title and attendees go into the note).
     @discardableResult
     func start(meeting m: UpcomingMeeting, origin o: Origin = .calendar) async -> Bool {
-        guard !isRecording, !isStarting else { return false }
+        guard !isRecording, !isStarting, !draining, !Updater.shared.installing else { return false }
         meeting = m
         origin = o
         return await start(keepMeeting: true)
@@ -85,17 +87,21 @@ final class NoteTaker: ObservableObject {
 
     @discardableResult
     func start() async -> Bool {
-        guard !isRecording, !isStarting else { return false }
+        guard !isRecording, !isStarting, !draining, !Updater.shared.installing else { return false }
         origin = .manual
         return await start(keepMeeting: false)
     }
 
     private func start(keepMeeting: Bool) async -> Bool {
-        guard !isRecording, !isStarting else { return false }
+        guard !isRecording, !isStarting, !draining, !Updater.shared.installing else { return false }
         isStarting = true
         defer { isStarting = false }
         if !keepMeeting { meeting = nil }
         let store = Store.shared
+        generation = UUID()
+        fileURL = nil
+        smartTranscript = nil
+        CaptionConnector.shared.reset()
         lines = []
         live = [:]
         status = "Starting…"
@@ -143,6 +149,7 @@ final class NoteTaker: ObservableObject {
         isRecording = true
         status = sysCapture != nil ? "Recording you and computer audio" : "Recording your microphone"
         createFile()
+        CaptionConnector.shared.start(service: origin == .call ? CallWatcher.shared.activeCall?.service.id ?? "" : "")
         NoteWindow.shared.show()
         Controller.shared.overlay.show(.noteTaker)
         if store.prefs.playSounds { NSSound(named: "Hero")?.play() }
@@ -154,6 +161,7 @@ final class NoteTaker: ObservableObject {
     func stop(sendImmediately: Bool = false) async {
         guard isRecording else { return }
         isRecording = false
+        draining = true
         finishing += 1
         defer { finishing -= 1 }
         status = "Finishing transcript…"
@@ -162,10 +170,13 @@ final class NoteTaker: ObservableObject {
         if Store.shared.prefs.playSounds { NSSound(named: "Bottle")?.play() }
 
         // From here on work on a copy, so a new recording that starts meanwhile can't mix with this one.
+        CaptionConnector.shared.stop()
         var note = snapshot()
         note.endedAt = Date()
         fileURL = nil
-        guard !note.lines.isEmpty else {
+        generation = UUID()
+        draining = false
+        guard !note.lines.isEmpty || !note.captions.isEmpty else {
             status = "Nothing was heard."
             if let f = note.fileURL {
                 let base = f.deletingPathExtension().path
@@ -176,7 +187,7 @@ final class NoteTaker: ObservableObject {
         Self.write(note, summary: nil)
         setStatus("Writing the smart transcript…")
         note.smart = await TextBrain.smartTranscript(note.plainText)
-        smartTranscript = note.smart
+        if !isRecording && !isStarting { smartTranscript = note.smart }
         Self.write(note, summary: nil)
         setStatus("Writing summary…")
         let summary = await summarize(note)
@@ -204,14 +215,15 @@ final class NoteTaker: ObservableObject {
         var endedAt: Date?
         var context: String
         var smart: String?
+        var captions: [MeetingCaption]
 
-        var plainText: String { lines.map { "\($0.speaker): \($0.text)" }.joined(separator: "\n") }
+        var plainText: String { MeetingTranscript.combined(local: lines.map { "\($0.speaker): \($0.text)" }.joined(separator: "\n"), captions: captions) }
         var rawTranscript: String { lines.map { "[\(NoteTaker.stampText($0.time))] \($0.speaker): \($0.text)" }.joined(separator: "\n") }
     }
 
     private func snapshot() -> NoteSnapshot {
         NoteSnapshot(lines: lines, meeting: meeting, fileURL: fileURL, startedAt: startedAt ?? Date(), endedAt: nil,
-                     context: context, smart: smartTranscript)
+                     context: context, smart: smartTranscript, captions: CaptionConnector.shared.lines)
     }
 
     private func teardown() async {
@@ -227,11 +239,18 @@ final class NoteTaker: ObservableObject {
     }
 
     private func wire(_ pipe: TranscriptPipe, speaker: String) {
+        let id = generation
         pipe.onFinal = { [weak self] text, t in
-            Task { @MainActor in self?.append(speaker: speaker, time: t, text: text) }
+            Task { @MainActor in
+                guard let self, self.generation == id else { return }
+                self.append(speaker: speaker, time: t, text: text)
+            }
         }
         pipe.onVolatile = { [weak self] text in
-            Task { @MainActor in self?.live[speaker] = text }
+            Task { @MainActor in
+                guard let self, self.generation == id else { return }
+                self.live[speaker] = text
+            }
         }
     }
 
@@ -247,13 +266,18 @@ final class NoteTaker: ObservableObject {
 
     // MARK: Summary (on-device Apple Intelligence)
 
+    func captionsChanged() {
+        guard isRecording else { return }
+        writeFile(summary: nil)
+    }
+
     private func summarize(_ note: NoteSnapshot) async -> String? {
         guard TextBrain.aiAvailable else { return nil }
         let base = note.smart ?? note.plainText
         var header = ""
         if let m = note.meeting { header = "Meeting: \(m.title)\nAttendees: \(m.attendees.joined(separator: ", "))\n\n" }
         let ins = """
-        You write meeting notes from a transcript. Lines starting with "Me:" are the user; "Others:" is everyone else.
+        You write meeting notes from a transcript. Platform speaker names identify the speakers when available. "Me:" and "Others:" are local audio backup labels. The two sources may overlap: merge duplicate statements, do not count them twice, and never infer a name for an anonymous speaker.
         Write in Markdown with exactly these sections:
         ## Summary
         (3–5 sentences)
@@ -308,9 +332,10 @@ final class NoteTaker: ObservableObject {
     }
 
     func transcriptText(timestamps: Bool = true) -> String {
-        lines.map { l in
+        let local = lines.map { l in
             timestamps ? "**\(stamp(l.time)) \(l.speaker):** \(l.text)" : "\(l.speaker): \(l.text)"
         }.joined(separator: timestamps ? "\n\n" : "\n")
+        return MeetingTranscript.combined(local: local, captions: CaptionConnector.shared.lines)
     }
 
     func stamp(_ t: Double) -> String { Self.stampText(t) }
@@ -338,7 +363,7 @@ final class NoteTaker: ObservableObject {
         var header = (note.meeting?.title ?? "Note – \(df.string(from: start))") + "\n"
         header += "Recorded with Just Say It · \(df.string(from: start)) · \(stampText(duration)) · \(note.context)\n"
         if let m = note.meeting, !m.attendees.isEmpty { header += "Attendees: " + m.attendees.joined(separator: ", ") + "\n" }
-        let raw = note.rawTranscript
+        let raw = MeetingTranscript.combined(local: note.rawTranscript, captions: note.captions)
 
         var txt = header + "\n"
         if let summary { txt += "\(rule)\nSUMMARY\n\(rule)\n" + Self.plain(summary) + "\n\n" }

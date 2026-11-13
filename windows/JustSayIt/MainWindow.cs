@@ -602,6 +602,13 @@ public sealed class MainWindow : Form
         f.Controls.Add(grid);
 
         var upd = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+        var captions = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+        var captionsOn = new CheckBox { Text = "Add meeting captions with speaker names", Checked = p.CaptureMeetingCaptions, AutoSize = true };
+        captionsOn.CheckedChanged += (_, _) => { p.CaptureMeetingCaptions = captionsOn.Checked; store.Save(); };
+        var setupCaptions = new Button { Text = "Set up browser connector", AutoSize = true };
+        setupCaptions.Click += (_, _) => CaptionConnector.OpenSetup();
+        captions.Controls.AddRange(new Control[] { captionsOn, L("Teams web / Google Meet · visible captions only. Speaker labels come from the platform. Your local audio transcript remains a separate backup. For Teams desktop, import a VTT, SRT or TXT transcript during recording.", Small, Color.DimGray, 740), setupCaptions });
+        f.Controls.Add(Group("Meeting intelligence", captions));
         var auto = new CheckBox { Text = "Check for updates automatically", Checked = p.CheckForUpdates, AutoSize = true };
         auto.CheckedChanged += (_, _) => { p.CheckForUpdates = auto.Checked; store.Save(); };
         var updStatus = L("", Small, Color.DimGray);
@@ -622,7 +629,9 @@ public sealed class MainWindow : Form
         Updater.Shared.Changed += OnUpd;
         FormClosed += (_, _) => Updater.Shared.Changed -= OnUpd;
         RenderUpd();
-        upd.Controls.AddRange(new Control[] { auto, updStatus, updBtn });
+        var installAuto = new CheckBox { Text = "Install verified releases automatically when idle", Checked = p.InstallUpdatesAutomatically, AutoSize = true };
+        installAuto.CheckedChanged += (_, _) => { p.InstallUpdatesAutomatically = installAuto.Checked; store.Save(); };
+        upd.Controls.AddRange(new Control[] { auto, installAuto, L("Checks daily while running. Never interrupts recording, dictation, result cards or CollectivIQ sends.", Small, Color.DimGray), updStatus, updBtn });
         f.Controls.Add(Group("Updates", upd));
 
         var link = new LinkLabel { Text = "github.com/stefanoromang/just-say-it", AutoSize = true, Margin = new Padding(0, 20, 0, 0) };

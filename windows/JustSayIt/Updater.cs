@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
 
 namespace JustSayIt;
 
@@ -21,7 +22,12 @@ public sealed class Updater
     public event Action? Changed;
 
     string? setupUrl;
-    readonly System.Windows.Forms.Timer timer = new() { Interval = 24 * 3600 * 1000 };
+    string? digest;
+    bool checking;
+    DateTime lastAttempt = DateTime.MinValue, lastInstallAttempt = DateTime.MinValue;
+    DateTime? idleSince;
+    readonly System.Windows.Forms.Timer timer = new() { Interval = 60_000 };
+    bool Busy => NoteTaker.Shared.IsBusy || Controller.Shared.IsBusy || Controller.Shared.Transcriber.IsRecording || Controller.Shared.Card.Visible || CIQWindow.Sending || CallWatcher.Shared.ActiveCall != null;
     static readonly HttpClient Http = CreateHttp();
 
     static HttpClient CreateHttp()
@@ -44,7 +50,15 @@ public sealed class Updater
 
     public void Boot()
     {
-        timer.Tick += async (_, _) => await Check(false);
+        timer.Tick += async (_, _) =>
+        {
+            if (!Store.Shared.Prefs.CheckForUpdates || Installing) return;
+            if (DateTime.UtcNow - lastAttempt >= TimeSpan.FromDays(1)) await Check(false);
+            if (Busy) { idleSince = null; return; }
+            idleSince ??= DateTime.UtcNow;
+            if (Store.Shared.Prefs.InstallUpdatesAutomatically && UpdateAvailable && DateTime.UtcNow - idleSince >= TimeSpan.FromMinutes(1)
+                && DateTime.UtcNow - lastInstallAttempt >= TimeSpan.FromHours(1)) await Install();
+        };
         timer.Start();
         _ = Check(false);
     }
@@ -67,6 +81,8 @@ public sealed class Updater
     {
         var p = Store.Shared.Prefs;
         if (!p.CheckForUpdates && !userInitiated) return;
+        if (checking || Installing) return;
+        checking = true; lastAttempt = DateTime.UtcNow;
         Set("Checking for updates…");
         try
         {
@@ -76,9 +92,10 @@ public sealed class Updater
                 var root = doc.RootElement;
                 Latest = root.GetProperty("tag_name").GetString()?.TrimStart('v', 'V');
                 Notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
-                setupUrl = root.GetProperty("assets").EnumerateArray()
-                    .Select(a => (name: a.GetProperty("name").GetString() ?? "", url: a.GetProperty("browser_download_url").GetString() ?? ""))
-                    .FirstOrDefault(a => a.name.StartsWith("JustSayIt-Setup-") && a.name.EndsWith(".exe")).url;
+                var asset = root.GetProperty("assets").EnumerateArray()
+                    .FirstOrDefault(a => (a.GetProperty("name").GetString() ?? "").StartsWith("JustSayIt-Setup-") && (a.GetProperty("name").GetString() ?? "").EndsWith(".exe"));
+                setupUrl = asset.ValueKind == JsonValueKind.Undefined ? null : asset.GetProperty("browser_download_url").GetString();
+                digest = asset.ValueKind != JsonValueKind.Undefined && asset.TryGetProperty("digest", out var hash) ? hash.GetString() : null;
                 if (string.IsNullOrEmpty(setupUrl)) setupUrl = null;
             }
             catch (HttpRequestException)
@@ -92,11 +109,13 @@ public sealed class Updater
             {
                 Set($"Version {Latest} is available (you have {Current}).");
                 // Never interrupt a recording or a CollectivIQ send with the update dialog.
-                if (!userInitiated && p.SkippedVersion != Latest && !NoteTaker.Shared.IsBusy && !CIQWindow.Sending) await Ui.Run(Prompt);
+                if (p.InstallUpdatesAutomatically) Set(Status + " Installs automatically when idle; recordings are never interrupted.");
+                else if (!userInitiated && p.SkippedVersion != Latest && !Busy) await Ui.Run(Prompt);
             }
             else Set(Latest != null && IsNewer(Latest, Current) ? $"Version {Latest} is being prepared, try again in a few minutes." : $"You're up to date ({Current}).");
         }
         catch (Exception e) { Set(userInitiated ? "Couldn't check for updates: " + e.Message : ""); }
+        finally { checking = false; }
     }
 
     static readonly HttpClient NoRedirect = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
@@ -108,6 +127,8 @@ public sealed class Updater
         if (string.IsNullOrEmpty(tag) || !tag.StartsWith("v", StringComparison.OrdinalIgnoreCase))
             throw new HttpRequestException("Could not read the latest version");
         Latest = tag.TrimStart('v', 'V');
+        if (!Regex.IsMatch(Latest, @"^\d+\.\d+(\.\d+)?$")) throw new HttpRequestException("Invalid release version");
+        digest = null;
         Notes = "";
         var parts = Latest.Split('.');
         var full = parts.Length >= 3 ? Latest : Latest + ".0";
@@ -133,13 +154,19 @@ public sealed class Updater
 
     public async Task Install()
     {
-        if (Installing || setupUrl == null) return;
-        if (NoteTaker.Shared.IsBusy || CIQWindow.Sending)
+        if (Installing || setupUrl == null || !UpdateAvailable) return;
+        if (Busy)
         {
             Set("Finish or end the Note Taker first – update after your notes are saved and sent.");
             return;
         }
+        if (!Regex.IsMatch(Latest ?? "", @"^\d+\.\d+(\.\d+)?$") || !Uri.TryCreate(setupUrl, UriKind.Absolute, out var uri)
+            || uri.Scheme != "https" || uri.Host != "github.com" || !uri.AbsolutePath.StartsWith($"/{Repo}/releases/download/"))
+            { Set("Invalid update source; installation blocked."); return; }
+        if (Store.Shared.Prefs.InstallUpdatesAutomatically && (digest == null || !Regex.IsMatch(digest, @"^sha256:[a-fA-F0-9]{64}$")))
+            { Set("Waiting for a verified release checksum before automatic installation."); return; }
         Installing = true;
+        lastInstallAttempt = DateTime.UtcNow;
         Set($"Downloading Just Say It {Latest}…");
         try
         {
@@ -147,6 +174,12 @@ public sealed class Updater
             await using (var src = await Http.GetStreamAsync(setupUrl))
             await using (var dst = File.Create(path))
                 await src.CopyToAsync(dst);
+            if (digest != null)
+            {
+                await using var file = File.OpenRead(path);
+                var actual = Convert.ToHexString(await SHA256.HashDataAsync(file));
+                if (!string.Equals("sha256:" + actual, digest, StringComparison.OrdinalIgnoreCase)) { File.Delete(path); throw new IOException("Update checksum mismatch; installation blocked."); }
+            }
             Set("Installing… Just Say It will restart.");
             // The installer closes this app, installs over it and relaunches it.
             // /CURRENTUSER keeps it a per-user install, so no administrator prompt appears.

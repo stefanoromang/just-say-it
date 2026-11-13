@@ -132,6 +132,7 @@ final class Controller: ObservableObject {
     }
 
     private func begin(scribe: Bool, handsFree: Bool) {
+        guard !Updater.shared.installing else { hotkeys.reset(); return }
         guard micGranted else { requestMic(); overlay.show(.error("Allow microphone access")); hotkeys.reset(); return }
         if NoteTaker.shared.isRecording { overlay.show(.error("Note Taker is recording – press Right ⇧ ×3 to stop")); hotkeys.reset(); return }
         if result.isVisible { result.hide() }

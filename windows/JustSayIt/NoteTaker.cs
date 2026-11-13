@@ -105,7 +105,7 @@ public sealed class NoteTaker
 
     async Task<bool> StartCore(UpcomingMeeting? m, Origin origin)
     {
-        if (IsRecording || IsBusyStarting) return false;
+        if (IsRecording || IsBusyStarting || Updater.Shared.Installing) return false;
         IsStarting = true;
         try { return await StartInner(m, origin); }
         finally { IsStarting = false; Changed?.Invoke(); }
@@ -116,6 +116,9 @@ public sealed class NoteTaker
         meeting = m;
         CurrentOrigin = origin;
         var p = Store.Shared.Prefs;
+        filePath = null;
+        SmartTranscript = null;
+        CaptionConnector.Shared.Reset();
         lock (linesGate) Lines.Clear();
         Set("Starting…");
         try
@@ -158,6 +161,7 @@ public sealed class NoteTaker
         SmartTranscript = null;
         filePath = Path.Combine(NotesDir, name);
         WriteFile(null);
+        CaptionConnector.Shared.Start(CurrentOrigin == Origin.Call ? CallWatcher.Shared.ActiveCall?.Service.Id ?? "" : "");
         cts = new CancellationTokenSource();
         var token = cts.Token;
         worker = Task.Run(() => Loop(token));
@@ -185,9 +189,10 @@ public sealed class NoteTaker
             if (Store.Shared.Prefs.PlaySounds) System.Media.SystemSounds.Exclamation.Play();
 
             // From here on work on a copy, so a new recording that starts meanwhile can't mix with this one.
-            var note = new Note(Snapshot(), meeting, filePath, StartedAt, DateTime.Now, context);
+            await Ui.Run(() => CaptionConnector.Shared.Stop());
+            var note = new Note(Snapshot(), meeting, filePath, StartedAt, DateTime.Now, context) { Captions = CaptionConnector.Shared.Snapshot() };
             flushing = false;
-            if (note.Lines.Length == 0)
+            if (note.Lines.Length == 0 && note.Captions.Length == 0)
             {
                 SetIdle("Nothing was heard.");
                 if (note.FilePath != null)
@@ -230,8 +235,9 @@ public sealed class NoteTaker
         public DateTime StartedAt = startedAt, EndedAt = endedAt;
         public string Context = context;
         public string? Smart;
-        public string PlainText => string.Join("\n", Lines.Select(l => $"{l.Speaker}: {l.Text}"));
-        public string Raw => string.Join("\n", Lines.Select(l => $"[{Stamp(l.Time)}] {l.Speaker}: {l.Text}"));
+        public MeetingCaption[] Captions = Array.Empty<MeetingCaption>();
+        public string PlainText => MeetingTranscript.Combined(string.Join("\n", Lines.Select(l => $"{l.Speaker}: {l.Text}")), Captions);
+        public string Raw => MeetingTranscript.Combined(string.Join("\n", Lines.Select(l => $"[{Stamp(l.Time)}] {l.Speaker}: {l.Text}")), Captions);
     }
 
     /// Status of a finishing recording; never overwrites the status of a new one.
@@ -375,8 +381,8 @@ public sealed class NoteTaker
     public string TranscriptText(bool timestamps = true)
     {
         lock (linesGate)
-            return string.Join(timestamps ? "\n\n" : "\n",
-                Lines.Select(l => timestamps ? $"**{Stamp(l.Time)} {l.Speaker}:** {l.Text}" : $"{l.Speaker}: {l.Text}"));
+            return MeetingTranscript.Combined(string.Join(timestamps ? "\n\n" : "\n",
+                Lines.Select(l => timestamps ? $"**{Stamp(l.Time)} {l.Speaker}:** {l.Text}" : $"{l.Speaker}: {l.Text}")), CaptionConnector.Shared.Snapshot());
     }
 
     /// Plain-text note: header, summary, smart transcript and raw transcript.
@@ -384,8 +390,10 @@ public sealed class NoteTaker
     void WriteFile(string? summary)
     {
         if (!IsRecording && !flushing) return;
-        WriteNote(new Note(Snapshot(), meeting, filePath, StartedAt, DateTime.Now, context) { Smart = SmartTranscript }, summary);
+        WriteNote(new Note(Snapshot(), meeting, filePath, StartedAt, DateTime.Now, context) { Smart = SmartTranscript, Captions = CaptionConnector.Shared.Snapshot() }, summary);
     }
+
+    public void CaptionsChanged() { if (IsRecording) { WriteFile(null); Changed?.Invoke(); } }
 
     static void WriteNote(Note n, string? summary)
     {

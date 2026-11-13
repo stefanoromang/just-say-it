@@ -2,6 +2,27 @@
 
 All notable changes to **Just Say It**, an original app designed and built by **Stefano Roman Gunness**.
 
+## 2.7 – 2026-11-12
+
+### Speaker-labelled meeting transcripts (optional)
+- Menu/Settings: **Add Teams / Meet captions**, off by default. The included Chrome/Edge/Brave extension captures visible Teams web / Google Meet captions through local native messaging. Platform speaker names are preserved; local audio remains a separate labelled backup.
+- **Import meeting transcript** accepts authorised UTF-8 VTT/SRT/TXT exports during recording, including Teams desktop exports. Unnamed speakers stay anonymous. Revised caption snapshots are updated, not duplicated; a second live browser meeting cannot mix into the recording.
+- Requires one-time connector setup and per-tab capture. No meeting policy is bypassed. Selectors are best-effort, not an official unrestricted transcript API. Live Teams/Meet capture still requires validation in real meetings.
+
+### Daily idle-safe automatic updates
+- Check daily while running; automatically install published releases when recording, dictation, open result cards, active-call tracking and CollectivIQ sending are idle. Checking/installation can be disabled separately.
+- Mac builds the published tag instead of main, verifies a staged app and retains the previous copy until replacement succeeds. Windows validates the official release URL and SHA-256 digest before automatic installation.
+- Mac manual installation requests a clean quit instead of killing a recording. Fixed a Mac stop/start overlap and isolated late recognition callbacks by recording ID.
+
+### Clearer desktop workspace
+- Refined Mac navigation/home page, speaker-labelled caption cards, source status and explicit setup/import controls.
+- Corrected local/cloud privacy wording when CollectivIQ delivery is enabled.
+
+### New Debian preview
+- GTK desktop app, local Whisper setup, optional system audio, transcript import/captions, optional Ollama writing, and the existing CollectivIQ rule.
+- Daily checksum-verified `.deb` updates wait for idle. Debian's package installer may require your system password; no password is stored.
+- **Not feature parity:** no automatic call detection/calendar joining, global hold key, screen context, automatic insertion or learned dictionary yet. Mac is the hands-on test platform; Debian desktop/audio and Windows interaction have not been manually validated. See `linux/README.md`.
+
 ## 2.6 – 2026-11-09
 
 ### CollectivIQ: the right notes to the right place, automatically

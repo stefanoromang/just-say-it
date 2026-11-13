@@ -31,7 +31,13 @@ struct MainView: View {
             List(Pane.allCases, selection: $ui.pane) { p in
                 Label(p.rawValue, systemImage: p.icon).tag(p)
             }
-            .navigationSplitViewColumnWidth(190)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 205, max: 240)
+            .safeAreaInset(edge: .bottom) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("JUST SAY IT").font(.caption.weight(.semibold)).tracking(1.4)
+                    Text("Private by default").font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(18)
+            }
         } detail: {
             ScrollView {
                 Group {
@@ -49,6 +55,7 @@ struct MainView: View {
                     }
                 }
                 .padding(28)
+                .frame(maxWidth: 1000, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle(ui.pane.rawValue)
@@ -74,10 +81,13 @@ struct HomePane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            Text("Just Say It").font(.largeTitle.bold())
-            Text("Free, unlimited, private voice typing. Everything runs on your Mac.")
+            Text("Your voice. Clear notes.").font(.system(size: 32, weight: .semibold, design: .rounded))
+            Text("Local voice typing, thoughtful writing and meeting notes in one workspace.")
                 .foregroundStyle(.secondary)
-            Text("Created by Stefano Roman Gunness").font(.caption).foregroundStyle(.tertiary)
+            HStack(spacing: 16) {
+                Label("On-device speech", systemImage: "lock.shield")
+                Label("Speaker-labelled captions", systemImage: "captions.bubble")
+            }.font(.caption.weight(.medium)).foregroundStyle(.secondary)
 
             GroupBox("Setup") {
                 VStack(alignment: .leading, spacing: 10) {
@@ -449,6 +459,7 @@ struct SettingsPane: View {
             Toggle("Use what's on screen as context (needs Screen Recording)", isOn: $store.prefs.useScreenContext)
             Toggle("Note Taker: Right ⇧ Shift × 3 starts/stops it", isOn: $store.prefs.noteTakerEnabled)
             Toggle("Note Taker: also record computer audio (the other people on a call)", isOn: $store.prefs.noteCaptureSystemAudio)
+            CaptionSettings(store: store)
             Toggle("Start Just Say It when I log in to my Mac", isOn: Binding(
                 get: { store.prefs.startAtLogin },
                 set: { store.prefs.startAtLogin = $0; LoginItem.set($0) }))
@@ -706,6 +717,10 @@ struct UpdatesSection: View {
     var body: some View {
         Section("Updates") {
             Toggle("Check for updates automatically", isOn: $store.prefs.checkForUpdates)
+            Toggle("Install published releases automatically when idle", isOn: $store.prefs.installUpdatesAutomatically)
+                .disabled(!store.prefs.checkForUpdates)
+            Text("Checks daily while running—more than twice a week. Installation waits for recordings, dictation, result cards and CollectivIQ sends to finish.")
+                .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Text("Version \(u.current)")
                 Spacer()
@@ -717,6 +732,26 @@ struct UpdatesSection: View {
                 }
             }
             if !u.status.isEmpty { Text(u.status).font(.caption).foregroundStyle(.secondary) }
+        }
+    }
+}
+
+struct CaptionSettings: View {
+    @ObservedObject var store: Store
+    @ObservedObject var connector = CaptionConnector.shared
+    @ObservedObject var notes = NoteTaker.shared
+    var body: some View {
+        Section {
+            Toggle("Add meeting captions with speaker names", isOn: $store.prefs.captureMeetingCaptions)
+            Label(notes.isRecording ? connector.status : store.prefs.captureMeetingCaptions ? "Enabled · start a recording, then start browser capture" : "Off · local transcription is unchanged", systemImage: "captions.bubble")
+                .font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Button("Set up browser connector") { connector.openSetup() }
+                Button("Import transcript…") { connector.importTranscript() }.disabled(!notes.isRecording)
+            }
+        } header: { Text("Meeting intelligence") } footer: {
+            Text("Optional Teams web / Google Meet connector. Turn on captions in the meeting and start capture from the extension. Speaker labels are supplied by the platform. Local audio remains a separate backup. Teams desktop: import an authorised VTT, SRT or TXT export. No meeting permissions are bypassed.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }

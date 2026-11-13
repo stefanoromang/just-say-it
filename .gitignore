@@ -9,3 +9,5 @@ dist/
 final/
 obj/
 windows/dist/
+__pycache__/
+*.pyc

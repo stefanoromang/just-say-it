@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Just Say It — Meeting Captions",
+  "version": "2.7.0",
+  "description": "Add visible Teams web and Google Meet captions, with speaker names, to your Just Say It notes. Enable capture for each meeting.",
+  "permissions": ["nativeMessaging", "activeTab"],
+  "action": { "default_popup": "popup.html" },
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["https://meet.google.com/*", "https://teams.microsoft.com/*", "https://teams.live.com/*", "https://teams.cloud.microsoft/*"],
+    "js": ["extract.js", "content.js"]
+  }]
+}

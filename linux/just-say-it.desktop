@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Just Say It
+Comment=Private voice typing and speaker-labelled meeting notes
+Exec=just-say-it
+Icon=audio-input-microphone
+Type=Application
+Categories=AudioVideo;Office;Utility;
+Terminal=false
+StartupNotify=true

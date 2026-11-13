@@ -20,7 +20,7 @@
     <Authors>Stefano Roman Gunness</Authors>
     <Copyright>© 2026 Stefano Roman Gunness. MIT License.</Copyright>
     <Description>Free, private voice typing for Windows.</Description>
-    <Version>2.6.0</Version>
+    <Version>2.7.0</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>
@@ -28,6 +28,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="../../integrations/captions/**" Link="captions/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Ical.Net" Version="5.2.3" />
     <PackageReference Include="NAudio.WinMM" Version="3.3.0" />
     <PackageReference Include="NAudio.Wasapi" Version="3.3.0" />

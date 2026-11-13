@@ -126,6 +126,7 @@ public sealed class Controller : IDisposable
 
     void Begin(bool isScribe, bool handsFree)
     {
+        if (Updater.Shared.Installing) { Hotkeys.Reset(); return; }
         Ui.Run(() =>
         {
             if (busy) { Hotkeys.Reset(); return; }

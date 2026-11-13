@@ -155,12 +155,14 @@ struct Prefs: Codable {
     var useScreenContext = true
     var noteTakerEnabled = true
     var noteCaptureSystemAudio = true
+    var captureMeetingCaptions = false
     var autoJoinEnabled = false
     var autoJoinStartNotes = true
     var autoJoinLeadSeconds = 60
     var autoJoinStopGraceSeconds = 120
     var autoJoinExcludedCalendars: [String] = []
     var checkForUpdates = true
+    var installUpdatesAutomatically = true
     var skippedVersion: String?
     var startAtLogin = true
     var autoRecordCalls = true
@@ -215,12 +217,14 @@ struct Prefs: Codable {
         useScreenContext = (try? c.decode(Bool.self, forKey: .useScreenContext)) ?? def.useScreenContext
         noteTakerEnabled = (try? c.decode(Bool.self, forKey: .noteTakerEnabled)) ?? def.noteTakerEnabled
         noteCaptureSystemAudio = (try? c.decode(Bool.self, forKey: .noteCaptureSystemAudio)) ?? def.noteCaptureSystemAudio
+        captureMeetingCaptions = (try? c.decode(Bool.self, forKey: .captureMeetingCaptions)) ?? false
         autoJoinEnabled = (try? c.decode(Bool.self, forKey: .autoJoinEnabled)) ?? def.autoJoinEnabled
         autoJoinStartNotes = (try? c.decode(Bool.self, forKey: .autoJoinStartNotes)) ?? def.autoJoinStartNotes
         autoJoinLeadSeconds = (try? c.decode(Int.self, forKey: .autoJoinLeadSeconds)) ?? def.autoJoinLeadSeconds
         autoJoinStopGraceSeconds = (try? c.decode(Int.self, forKey: .autoJoinStopGraceSeconds)) ?? def.autoJoinStopGraceSeconds
         autoJoinExcludedCalendars = (try? c.decode([String].self, forKey: .autoJoinExcludedCalendars)) ?? []
         checkForUpdates = (try? c.decode(Bool.self, forKey: .checkForUpdates)) ?? def.checkForUpdates
+        installUpdatesAutomatically = (try? c.decode(Bool.self, forKey: .installUpdatesAutomatically)) ?? true
         skippedVersion = try? c.decode(String.self, forKey: .skippedVersion)
         startAtLogin = (try? c.decode(Bool.self, forKey: .startAtLogin)) ?? def.startAtLogin
         autoRecordCalls = (try? c.decode(Bool.self, forKey: .autoRecordCalls)) ?? def.autoRecordCalls

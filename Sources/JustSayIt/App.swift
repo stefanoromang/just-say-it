@@ -68,6 +68,9 @@ struct MenuContent: View {
             Button("Start Note Taker (Right ⇧ ×3)") { c.toggleNotes() }
         }
         Button("Show Note Taker") { NoteWindow.shared.show() }
+        Toggle("Add Teams / Meet captions", isOn: $store.prefs.captureMeetingCaptions)
+        Button("Import meeting transcript…") { CaptionConnector.shared.importTranscript() }.disabled(!notes.isRecording)
+        Button("Set up caption connector…") { CaptionConnector.shared.openSetup() }
         Button("CollectivIQ…") {
             NSApp.activate(ignoringOtherApps: true)
             openWindow(id: "main")

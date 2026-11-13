@@ -10,6 +10,7 @@ APP="build/Just Say It.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/JustSayIt "$APP/Contents/MacOS/JustSayIt"
+cp -R integrations/captions "$APP/Contents/Resources/captions"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -22,8 +23,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>JustSayIt</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>2.6</string>
-  <key>CFBundleVersion</key><string>17</string>
+  <key>CFBundleShortVersionString</key><string>2.7</string>
+  <key>CFBundleVersion</key><string>18</string>
   <key>NSHumanReadableCopyright</key><string>© 2026 Stefano Roman Gunness. MIT License.</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>LSUIElement</key><true/>
@@ -58,9 +59,40 @@ codesign --force --options runtime --entitlements build/entitlements.plist \
   --sign "Just Say It Local Signing" --keychain "$HOME/Library/Keychains/justsayit-signing.keychain-db" \
   --identifier com.stefano.justsayit "$APP"
 
-[ -n "$JUSTSAYIT_UPDATER" ] || pkill -x JustSayIt 2>/dev/null || true
+if [ -z "$JUSTSAYIT_UPDATER" ] && pgrep -x JustSayIt >/dev/null; then
+  osascript -e 'tell application "Just Say It" to quit' || exit 1
+  for n in {1..30}; do
+    pgrep -x JustSayIt >/dev/null || break
+    sleep 1
+  done
+  if pgrep -x JustSayIt >/dev/null; then
+    echo "The app is still saving notes or sending to CollectivIQ. Installation paused; retry after it finishes." >&2
+    exit 1
+  fi
+fi
 mkdir -p ~/Applications
-rm -rf ~/Applications/"Just Say It.app"
-cp -R "$APP" ~/Applications/
+NEXT="$HOME/Applications/Just Say It.next.app"
+if [ -e "$NEXT" ]; then
+  echo "An earlier staged app exists at $NEXT; leaving it untouched." >&2
+  exit 1
+fi
+cp -R "$APP" "$NEXT"
+codesign --verify --deep --strict "$NEXT"
+if [ -e "$HOME/Applications/Just Say It.app" ]; then
+  BACKUP="$HOME/Applications/Just Say It.previous.app"
+  if [ -e "$BACKUP" ]; then
+    echo "An earlier backup exists at $BACKUP; leaving it untouched." >&2
+    rm -rf "$NEXT"
+    exit 1
+  fi
+  mv "$HOME/Applications/Just Say It.app" "$BACKUP"
+  if ! mv "$NEXT" "$HOME/Applications/Just Say It.app"; then
+    mv "$BACKUP" "$HOME/Applications/Just Say It.app"
+    exit 1
+  fi
+  rm -rf "$BACKUP"
+else
+  mv "$NEXT" "$HOME/Applications/Just Say It.app"
+fi
 rm -rf "$APP"
 echo "Installed: ~/Applications/Just Say It.app"

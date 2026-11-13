@@ -7,6 +7,7 @@ import SwiftUI
 struct NoteView: View {
     @ObservedObject var n = NoteTaker.shared
     @ObservedObject var tick = Ticker.shared
+    @ObservedObject var captions = CaptionConnector.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -29,14 +30,31 @@ struct NoteView: View {
             }
             Text(n.status + (n.isRecording ? (n.origin == .call ? " · stops by itself when the call ends" : " · press Right ⇧ three times or End Note Taker to finish") : ""))
                 .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Label(captions.status, systemImage: "captions.bubble").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("Import transcript…") { captions.importTranscript() }.disabled(!n.isRecording)
+            }
 
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
+                        if !captions.lines.isEmpty {
+                            Text("MEETING CAPTIONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            ForEach(Array(captions.lines.enumerated()), id: \.offset) { _, l in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(l.speaker).font(.subheadline.weight(.semibold)).foregroundStyle(.tint)
+                                    Text(l.text).textSelection(.enabled)
+                                }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
+                                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                            Divider()
+                            Text("LOCAL AUDIO BACKUP").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        }
                         ForEach(n.lines) { l in
                             HStack(alignment: .top, spacing: 8) {
                                 Text(n.stamp(l.time)).font(.caption.monospacedDigit()).foregroundStyle(.tertiary).frame(width: 44, alignment: .leading)
-                                Text(l.speaker).font(.caption.bold()).foregroundStyle(l.speaker == "Me" ? .purple : .blue).frame(width: 48, alignment: .leading)
+                                Text(l.speaker).font(.caption.bold()).foregroundStyle(l.speaker == "Me" ? .purple : .blue).frame(width: 72, alignment: .leading)
                                 Text(l.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
@@ -65,7 +83,7 @@ struct NoteView: View {
                 }
                 Button("Notes folder") { NSWorkspace.shared.open(NoteTaker.notesDir) }
                 Spacer()
-                Text("Saved on this Mac only").font(.caption2).foregroundStyle(.tertiary)
+                Text(Store.shared.prefs.ciqEnabled ? "Saved locally · CollectivIQ delivery enabled" : "Saved on this Mac").font(.caption2).foregroundStyle(.secondary)
             }
         }
         .padding(16)

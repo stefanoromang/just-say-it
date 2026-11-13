@@ -11,6 +11,9 @@ Created by **Stefano Roman Gunness** · MIT License.
 | `Tests/` | Mac text-rule tests (`swift run RuleTests`) |
 | `windows/JustSayIt/` | Windows app source (C# / WinForms) |
 | `windows/JustSayIt.Tests/` | Windows tests (`dotnet test`) |
+| `linux/` | Debian preview, packaging and documented platform limitations |
+| `integrations/captions/` | Optional browser caption extension, native host and setup instructions |
+| `integrations/ciq/` | Linux copies of Mac page scripts, updated by `scripts/sync-ciq-scripts.py` |
 | `windows/installer/JustSayIt.iss` | Windows installer script (Inno Setup) |
 | `scripts/` | Icon generator and signing-identity setup |
 | `docs/` | Images used by the README |
@@ -50,7 +53,11 @@ Build output (`.build/`, `build/`, `bin/`, `obj/`) is not kept; it's recreated b
 3. Add an entry to `CHANGELOG.md`.
 4. Test locally: `swift run -c release RuleTests` and `dotnet test windows/JustSayIt.Tests/JustSayIt.Tests.csproj`, then `./build-app.sh` to try it on your Mac.
 5. Upload: `git add -A && git commit -m "…" && git push`. GitHub runs all checks, including the Windows self-test on a real Windows machine and a no-admin install test.
-6. When the checks pass, publish: `gh release create vX.Y … --latest`. GitHub builds and attaches the Windows installer and portable zip, and everyone's app offers the update automatically.
+6. When checks pass, publish: `gh release create vX.Y … --latest`. GitHub attaches Windows installers and the Debian preview. Upload the locally signed Mac zip and caption connector zip too. Daily updates install when idle; Debian may need system authentication.
+
+## Caption / Debian source checks
+
+After changing Mac CollectivIQ page scripts, run `python3 scripts/sync-ciq-scripts.py`. Local checks: `python3 -m unittest discover -s integrations/captions`, `python3 -m unittest discover -s linux`, and `node integrations/captions/test_extract.js`. They do not replace live Teams/Meet or Linux desktop/audio tests. Build Debian on Linux using `sh linux/build-deb.sh`. Do not describe source/package checks as a manually tested Linux app.
 
 ## Signing on a new Mac
 

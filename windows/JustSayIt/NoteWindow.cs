@@ -47,6 +47,10 @@ public sealed class NoteWindow : Form
         top.Controls.Add(title);
         top.Controls.Add(status);
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 46, Padding = new Padding(10, 8, 10, 6) };
+        var import = new Button { Text = "Import transcript…", AutoSize = true };
+        import.Click += (_, _) => CaptionConnector.Shared.Import();
+        bottom.Height = 80; bottom.WrapContents = true;
+        bottom.Controls.Add(import);
         bottom.Controls.AddRange(new Control[] { toggle, copy, open, folder });
         var mid = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 4, 12, 4) };
         transcript.Dock = DockStyle.Fill;
@@ -74,11 +78,12 @@ public sealed class NoteWindow : Form
         var elapsed = n.IsRecording ? "  " + NoteTaker.Stamp((DateTime.Now - n.StartedAt).TotalSeconds) : "";
         title.Text = (n.IsRecording ? "● Recording" : "Note Taker") + elapsed;
         title.ForeColor = n.IsRecording ? Color.Firebrick : Color.Black;
-        status.Text = n.Status + (n.IsRecording ? (n.CurrentOrigin == NoteTaker.Origin.Call ? " · stops by itself when the call ends" : " · Right Shift ×3 or End Note Taker to finish") : "");
+        status.Text = n.Status + (n.IsRecording ? " · " + CaptionConnector.Shared.Status : "");
         toggle.Text = n.IsRecording ? "■ End Note Taker" : "● New note";
         open.Visible = !n.IsRecording && n.LastNotePath != null;
-        var lines = n.Snapshot();
-        if (lines.Length != shownLines)
+        var captions = CaptionConnector.Shared.Snapshot();
+        var lines = captions.Select(l => new NoteLine(l.Speaker, Math.Max(0, l.Received - new DateTimeOffset(n.StartedAt == default ? DateTime.Now : n.StartedAt).ToUnixTimeSeconds()), l.Text)).Concat(n.Snapshot()).ToArray();
+        if (lines.Length != shownLines || captions.Length > 0)
         {
             // Lines are kept in time order, so a new line can land before older ones: redraw when that happens.
             bool appendOnly = shownLines >= 0 && lines.Length > shownLines && lastShown != null

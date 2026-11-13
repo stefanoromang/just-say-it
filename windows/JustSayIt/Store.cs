@@ -147,6 +147,8 @@ public class Prefs
     public int AutoJoinStopGraceSeconds { get; set; } = 120;
     public List<CalendarFeed> CalendarFeeds { get; set; } = new();
     public bool CheckForUpdates { get; set; } = true;
+    public bool InstallUpdatesAutomatically { get; set; } = true;
+    public bool CaptureMeetingCaptions { get; set; } = false;
     public string? SkippedVersion { get; set; }
     public bool AutoRecordCalls { get; set; } = true;
     public bool RecordTeamsCalls { get; set; } = true;

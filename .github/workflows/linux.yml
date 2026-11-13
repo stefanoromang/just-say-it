@@ -1,0 +1,36 @@
+name: Debian preview build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Source checks (not a Linux desktop test)
+        run: |
+          python3 -m py_compile linux/*.py integrations/captions/*.py
+          python3 scripts/sync-ciq-scripts.py
+          git diff --exit-code integrations/ciq
+      - name: Build Debian package
+        run: sh linux/build-deb.sh
+      - name: Inspect package metadata
+        run: dpkg-deb --info linux/dist/*.deb
+      - uses: actions/upload-artifact@v5
+        with:
+          name: JustSayIt-Debian-preview
+          path: linux/dist/*.deb
+      - name: Attach release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload '${{ github.event.release.tag_name }}' linux/dist/*.deb

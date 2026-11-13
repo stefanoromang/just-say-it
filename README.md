@@ -107,6 +107,14 @@ Hold **⇧ Shift + Right ⌥** and say what you want, like "tell Laura yes, we c
 
 ## Note Taker
 
+### Teams / Google Meet captions and speaker names (optional)
+
+Turn on **Add Teams / Meet captions** in the app menu or **Settings › Meeting intelligence**. Choose **Set up browser connector** and follow the included instructions to load the Chrome/Edge/Brave extension and register its native host. Show captions/transcription in your meeting, then click **Start capture** in the extension. Just Say It must be recording; its status changes from **Waiting** to **Connected** when text arrives.
+
+This reads **visible Teams web / Google Meet captions**, not hidden or restricted meeting data. Organiser permissions and recording consent still apply. Names are supplied by the meeting platform, not verified identities. Capture cannot recover captions already gone from the page; website changes may require connector updates. For Teams desktop, use **Import meeting transcript** to add an authorised `.vtt`, `.srt` or UTF-8 `.txt` export while recording.
+
+Platform text is saved in its own labelled section and included in smart notes/CollectivIQ delivery. Local audio remains a separate backup; overlapping statements can appear in both. Disabling the option stops new capture without deleting text already collected. The connector uses native messaging and local files, not an open network port. Live Teams/Meet compatibility needs real-meeting validation.
+
 The Note Taker records and transcribes conversations, such as calls, interviews, stand-ups and client meetings, and turns them into notes you can use.
 
 ### Start and stop
@@ -205,7 +213,7 @@ Then turn on **Join my calendar calls automatically**. The first time you join a
 
 **No administrator password needed.** Just Say It installs and runs for your Windows account only, so it works on work PCs and normal (non-admin) accounts.
 
-**Easiest:** download **`JustSayIt-Setup-2.6.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
+**Easiest:** download **`JustSayIt-Setup-2.7.0.exe`** from the [latest release](https://github.com/stefanoromang/just-say-it/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\JustSayIt`.
 
 **Or** open PowerShell and paste:
 
@@ -267,7 +275,15 @@ Active modes pulse. The colors are bright neon so they stand out on light and da
 
 ## Updates
 
-Just Say It checks for new versions automatically (when it starts and once a day) and offers to install them with one click. You can also use **Check for Updates…** in the menu bar / tray, or turn automatic checks off in **Settings › Updates**.
+Just Say It checks published releases at startup and daily while running—more than twice a week—and installs automatically after recording, transcription, dictation, open result cards and CollectivIQ sends finish. Mac builds the published tag; Windows validates the official download URL and SHA-256 digest. Missing checksums block automatic Windows installs. Checking/installation are independent options in **Settings › Updates**.
+
+The app cannot check while closed or offline; it resumes when running again. Installation briefly restarts Mac/Windows. Debian may ask for your system password. Meeting caption capture still needs the optional connector's one-time setup.
+
+## Debian / Linux preview
+
+Download **`just-say-it_2.7.0_all.deb`** from the release and install with your package manager. Run `/usr/share/just-say-it/setup-speech.sh` once for local Whisper. Optional cleanup/Scribe uses separately installed local Ollama. See [linux/README.md](linux/README.md) for dependencies and limits.
+
+This new preview is **not full Mac/Windows parity**: start/end recordings manually and use Copy. No automatic call detection, calendar joining, screen context, global hold key, automatic insertion or learned dictionary yet. Only Mac receives hands-on validation here; Debian source/package checks do not establish real desktop/audio compatibility.
 
 ## Privacy
 
